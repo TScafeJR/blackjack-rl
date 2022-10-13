@@ -26,8 +26,8 @@ class Deck:
         random.shuffle(self.cards)
 
     def draw_card(self):
-        if (len(self.cards) == 0):
-            raise Exception('out of cards')
+        if len(self.cards) == 0:
+            self.shuffle_empty_deck()
         discarded_card = self.cards.pop()
         self.discarded_cards.append(discarded_card)
         return discarded_card
@@ -39,6 +39,7 @@ class Deck:
 
     def shuffle_empty_deck(self):
         self.cards = self.discarded_cards
+        self.discarded_cards = []
         self.shuffle_cards()
 
     def get_cards(self):

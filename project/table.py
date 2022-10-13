@@ -29,12 +29,12 @@ class Table:
         self.dealer = None
         self.players: List[Player] = []
         self.hand_results = {}
+        self.card_tracker = {}
         self.add_decks()
         self.config_results_map()
 
     def add_decks(self) -> None:
         table_deck = Deck()
-        print(table_deck)
         if self.num_decks == 1:
             self.num_decks = table_deck
         else:
@@ -67,7 +67,6 @@ class Table:
             player.return_cards()
 
     def track_hand(self, hand_result: HandResult):
-        print('inside', hand_result)
         self.hands_played += 1
         self.hand_results[hand_result.name] += 1
 
@@ -87,6 +86,9 @@ class Table:
     def view_stats(self):
         print(f'hands played: {self.hands_played}')
         print(f'hand results: {json.dumps(self.hand_results, indent=4)}')
+
+        # view card distribution / frequency
+        print(f'card distribution results: {json.dumps(self.card_tracker, indent=4)}')
         print(f'player money {self.players[0].get_money()}')
         print(f'house money {self.table_pot}')
 
@@ -132,10 +134,15 @@ class Table:
                         player_turn_result = HandResult.BUST
                     break
 
-            print(f'player hand: {player1.see_hand()}')
+            player_hand = player1.see_hand()
+            print(f'player hand: {player_hand}')
+            for card in player_hand:
+                if card in self.card_tracker:
+                    self.card_tracker[card] += 1
+                else:
+                    self.card_tracker[card] = 1
 
             if player_turn_result == HandResult.BUST:
-                print("player busted")
                 self.track_hand(player_turn_result)
                 self.collect_cards()
                 return
@@ -151,14 +158,19 @@ class Table:
                     dealer_in_turn = False
                     break
 
-            print(f'dealer hand: {dealer.see_hand()}')
+            dealer_hand = dealer.see_hand()
+            print(f'dealer hand: {dealer_hand}')
+            for card in dealer_hand:
+                if card in self.card_tracker:
+                    self.card_tracker[card] += 1
+                else:
+                    self.card_tracker[card] = 1
 
             player_hand_total = player1.get_hand_value()
             dealer_hand_total = dealer.get_hand_value()
 
             if dealer_hand_total > self.BLACKJACK:
                 player_turn_result = HandResult.DEALER_BUST
-                print(player_turn_result)
                 self.track_hand(player_turn_result)
                 self.collect_cards()
                 return
@@ -176,8 +188,4 @@ class Table:
 
             self.track_hand(player_turn_result)
             self.collect_cards()
-
-
-            print(player_turn_result)
-
 

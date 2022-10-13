@@ -3,7 +3,7 @@ import project
 if __name__ == '__main__':
     game_casino = project.Casino()
     game_dealer = project.Dealer()
-    player1 = project.Player(1000)
+    player1 = project.Player(5000)
 
     game_table = project.Table(4, 10)\
         .add_dealer(game_dealer)\
