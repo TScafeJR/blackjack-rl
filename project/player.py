@@ -2,7 +2,6 @@ from enum import Enum
 import random
 from .base_player import BasePlayer
 
-
 class PlayerDecision(Enum):
     HIT = 1
     STAY = 2
@@ -11,8 +10,9 @@ class PlayerDecision(Enum):
 
 class Player(BasePlayer):
     def __init__(self, starting_money: int):
-        self.money = starting_money
         super().__init__()
+        self.money = starting_money
+        self.last_hand_res = 0
 
     @staticmethod
     def make_decision() -> PlayerDecision:
@@ -28,7 +28,12 @@ class Player(BasePlayer):
     def submit_bet(self) -> int:
         bet_amount = min(self.get_bet_amount(), self.money)
         self.money = self.money - bet_amount
+        self.last_hand_res = -bet_amount
         return bet_amount
 
     def receive_winnings(self, amount: int):
         self.money += amount
+        self.last_hand_res += amount
+
+    def get_last_hand_res(self):
+        return self.last_hand_res

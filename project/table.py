@@ -18,7 +18,7 @@ class HandResult(Enum):
 
 
 class Table:
-    BLACKJACK = 21
+    BLACKJACK_SCORE = 21
 
     def __init__(self, num_decks: int, minimum_bet: int):
         self.num_decks = num_decks
@@ -35,9 +35,8 @@ class Table:
 
     def add_decks(self) -> None:
         table_deck = Deck()
-        if self.num_decks == 1:
-            self.num_decks = table_deck
-        else:
+
+        if self.num_decks != 1:
             for n in range(self.num_decks - 1):
                 new_deck = Deck()
                 table_deck.combine_deck_and_shuffle(new_deck)
@@ -51,6 +50,9 @@ class Table:
     def add_player(self, new_player: Player) -> Table:
         self.players.append(new_player)
         return self
+
+    def get_players(self) -> List[Player]:
+        return self.players
 
     def receive_money(self, amount_deposit: int) -> Table:
         self.table_pot += amount_deposit
@@ -92,7 +94,10 @@ class Table:
         print(f'player money {self.players[0].get_money()}')
         print(f'house money {self.table_pot}')
 
-    def play_hand(self) -> None:
+    def get_results_of_all_player_hands(self) -> List[int]:
+        return list(map(lambda player: player.get_last_hand_res(), self.players))
+
+    def play_hand(self) -> List[int]:
         if self.dealer is not None and len(self.players) > 0:
             player1 = self.players[0]
             dealer = self.dealer
@@ -109,7 +114,7 @@ class Table:
 
             while player_in_turn:
                 player_hand_total = player1.get_hand_value()
-                if player_hand_total == self.BLACKJACK:
+                if player_hand_total == self.BLACKJACK_SCORE:
                     player_turn_result = HandResult.PLAYER_BLACKJACK
                     break
 
@@ -118,7 +123,7 @@ class Table:
                 if player_decision == PlayerDecision.HIT:
                     dealer.deal_player_card(player1, deck)
                     player_hand_total = player1.get_hand_value()
-                    if player_hand_total > self.BLACKJACK:
+                    if player_hand_total > self.BLACKJACK_SCORE:
                         player_in_turn = False
                         player_turn_result = HandResult.BUST
                         break
@@ -128,9 +133,11 @@ class Table:
                 elif player_decision == PlayerDecision.DOUBLE_DOWN:
                     dealer.deal_player_card(player1, deck)
                     player1_bet *= 2
+                    double_down_transfer = player1.submit_bet()
+                    self.receive_money(double_down_transfer)
                     player_in_turn = False
                     player_hand_total = player1.get_hand_value()
-                    if player_hand_total > self.BLACKJACK:
+                    if player_hand_total > self.BLACKJACK_SCORE:
                         player_turn_result = HandResult.BUST
                     break
 
@@ -145,7 +152,7 @@ class Table:
             if player_turn_result == HandResult.BUST:
                 self.track_hand(player_turn_result)
                 self.collect_cards()
-                return
+                return self.get_results_of_all_player_hands()
 
             dealer_in_turn = True
 
@@ -169,23 +176,23 @@ class Table:
             player_hand_total = player1.get_hand_value()
             dealer_hand_total = dealer.get_hand_value()
 
-            if dealer_hand_total > self.BLACKJACK:
+            if dealer_hand_total > self.BLACKJACK_SCORE:
                 player_turn_result = HandResult.DEALER_BUST
                 self.track_hand(player_turn_result)
                 self.collect_cards()
-                return
+                return self.get_results_of_all_player_hands()
 
             if player_hand_total == dealer_hand_total:
                 player_turn_result = HandResult.PUSH
                 self.disperse_winnings(player1, player1_bet)
             elif player_turn_result == HandResult.PLAYER_BLACKJACK:
-                self.disperse_winnings(player1, player1_bet*2.5)
+                self.disperse_winnings(player1, player1_bet * 2.5)
             elif player_hand_total < dealer_hand_total:
                 player_turn_result = HandResult.DEALER_WIN
             elif player_hand_total > dealer_hand_total:
                 player_turn_result = HandResult.PLAYER_WIN
-                self.disperse_winnings(player1, player1_bet*2)
+                self.disperse_winnings(player1, player1_bet * 2)
 
             self.track_hand(player_turn_result)
             self.collect_cards()
-
+            return self.get_results_of_all_player_hands()
