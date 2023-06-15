@@ -94,105 +94,114 @@ class Table:
         print(f'player money {self.players[0].get_money()}')
         print(f'house money {self.table_pot}')
 
-    def get_results_of_all_player_hands(self) -> List[int]:
-        return list(map(lambda player: player.get_last_hand_res(), self.players))
+    def get_results_of_all_player_hands(self) -> List[Player]:
+        return self.players
+
+    @staticmethod
+    def player_can_play_hand(player: Player) -> bool:
+        return player.get_money() >= 0
 
     def play_hand(self) -> List[int]:
         if self.dealer is not None and len(self.players) > 0:
-            player1 = self.players[0]
             dealer = self.dealer
             deck = self.cards
 
-            dealer.deal_player_initial_cards(player1, deck)
+            bets = {}
+            for player in self.players:
+                if not self.player_can_play_hand(player):
+                    player.handle_hand_skipped()
+                    continue
+                dealer.deal_player_initial_cards(player, deck)
+                player_bet = player.submit_bet()
+                self.receive_money(player_bet)
+                bets[player.player_id] = player_bet
+
             dealer.deal_self_cards(deck)
 
-            player1_bet = player1.submit_bet()
-            self.receive_money(player1_bet)
+            for player in self.players:
+                if not self.player_can_play_hand(player):
+                    continue
+                player_in_turn = True
+                player_turn_result = HandResult.UNSPECIFIED
 
-            player_in_turn = True
-            player_turn_result = HandResult.UNSPECIFIED
-
-            while player_in_turn:
-                player_hand_total = player1.get_hand_value()
-                if player_hand_total == self.BLACKJACK_SCORE:
-                    player_turn_result = HandResult.PLAYER_BLACKJACK
-                    break
-
-                player_decision = player1.make_decision()
-
-                if player_decision == PlayerDecision.HIT:
-                    dealer.deal_player_card(player1, deck)
-                    player_hand_total = player1.get_hand_value()
-                    if player_hand_total > self.BLACKJACK_SCORE:
-                        player_in_turn = False
-                        player_turn_result = HandResult.BUST
+                while player_in_turn:
+                    player_hand_total = player.get_hand_value()
+                    if player_hand_total == self.BLACKJACK_SCORE:
+                        player_turn_result = HandResult.PLAYER_BLACKJACK
                         break
-                elif player_decision == PlayerDecision.STAY:
-                    player_in_turn = False
-                    break
-                elif player_decision == PlayerDecision.DOUBLE_DOWN:
-                    dealer.deal_player_card(player1, deck)
-                    player1_bet *= 2
-                    double_down_transfer = player1.submit_bet()
-                    self.receive_money(double_down_transfer)
-                    player_in_turn = False
-                    player_hand_total = player1.get_hand_value()
-                    if player_hand_total > self.BLACKJACK_SCORE:
-                        player_turn_result = HandResult.BUST
-                    break
 
-            player_hand = player1.see_hand()
-            print(f'player hand: {player_hand}')
-            for card in player_hand:
-                if card in self.card_tracker:
-                    self.card_tracker[card] += 1
-                else:
-                    self.card_tracker[card] = 1
+                    player_decision = player.make_decision()
 
-            if player_turn_result == HandResult.BUST:
-                self.track_hand(player_turn_result)
-                self.collect_cards()
-                return self.get_results_of_all_player_hands()
+                    if player_decision == PlayerDecision.HIT:
+                        dealer.deal_player_card(player, deck)
+                        player_hand_total = player.get_hand_value()
+                        if player_hand_total > self.BLACKJACK_SCORE:
+                            player_in_turn = False
+                            player_turn_result = HandResult.BUST
+                            break
+                    elif player_decision == PlayerDecision.STAY:
+                        player_in_turn = False
+                        break
+                    elif player_decision == PlayerDecision.DOUBLE_DOWN:
+                        dealer.deal_player_card(player, deck)
+                        bets[player.player_id] *= 2
+                        double_down_transfer = player.submit_bet()
+                        self.receive_money(double_down_transfer)
+                        player_in_turn = False
+                        player_hand_total = player.get_hand_value()
+                        if player_hand_total > self.BLACKJACK_SCORE:
+                            player_turn_result = HandResult.BUST
+                        break
 
-            dealer_in_turn = True
+                player_hand = player.see_hand()
+                for card in player_hand:
+                    if card in self.card_tracker:
+                        self.card_tracker[card] += 1
+                    else:
+                        self.card_tracker[card] = 1
 
-            while dealer_in_turn:
+                if player_turn_result == HandResult.BUST:
+                    self.track_hand(player_turn_result)
+                    continue
+
+                dealer_in_turn = True
+
+                while dealer_in_turn:
+                    dealer_hand_total = dealer.get_hand_value()
+
+                    if dealer_hand_total < 17:
+                        dealer.deal_self_card(deck)
+                    else:
+                        dealer_in_turn = False
+                        break
+
+                dealer_hand = dealer.see_hand()
+                for card in dealer_hand:
+                    if card in self.card_tracker:
+                        self.card_tracker[card] += 1
+                    else:
+                        self.card_tracker[card] = 1
+
+                player_hand_total = player.get_hand_value()
                 dealer_hand_total = dealer.get_hand_value()
 
-                if dealer_hand_total < 17:
-                    dealer.deal_self_card(deck)
-                else:
-                    dealer_in_turn = False
-                    break
+                if dealer_hand_total > self.BLACKJACK_SCORE:
+                    player_turn_result = HandResult.DEALER_BUST
+                    self.track_hand(player_turn_result)
+                    continue
 
-            dealer_hand = dealer.see_hand()
-            print(f'dealer hand: {dealer_hand}')
-            for card in dealer_hand:
-                if card in self.card_tracker:
-                    self.card_tracker[card] += 1
-                else:
-                    self.card_tracker[card] = 1
+                if player_hand_total == dealer_hand_total:
+                    player_turn_result = HandResult.PUSH
+                    self.disperse_winnings(player, bets[player.player_id])
+                elif player_turn_result == HandResult.PLAYER_BLACKJACK:
+                    self.disperse_winnings(player, bets[player.player_id] * 2.5)
+                elif player_hand_total < dealer_hand_total:
+                    player_turn_result = HandResult.DEALER_WIN
+                elif player_hand_total > dealer_hand_total:
+                    player_turn_result = HandResult.PLAYER_WIN
+                    self.disperse_winnings(player, bets[player.player_id] * 2)
 
-            player_hand_total = player1.get_hand_value()
-            dealer_hand_total = dealer.get_hand_value()
-
-            if dealer_hand_total > self.BLACKJACK_SCORE:
-                player_turn_result = HandResult.DEALER_BUST
                 self.track_hand(player_turn_result)
-                self.collect_cards()
-                return self.get_results_of_all_player_hands()
 
-            if player_hand_total == dealer_hand_total:
-                player_turn_result = HandResult.PUSH
-                self.disperse_winnings(player1, player1_bet)
-            elif player_turn_result == HandResult.PLAYER_BLACKJACK:
-                self.disperse_winnings(player1, player1_bet * 2.5)
-            elif player_hand_total < dealer_hand_total:
-                player_turn_result = HandResult.DEALER_WIN
-            elif player_hand_total > dealer_hand_total:
-                player_turn_result = HandResult.PLAYER_WIN
-                self.disperse_winnings(player1, player1_bet * 2)
-
-            self.track_hand(player_turn_result)
             self.collect_cards()
             return self.get_results_of_all_player_hands()

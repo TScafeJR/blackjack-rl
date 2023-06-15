@@ -20,8 +20,4 @@ class Environment:
         return self.remaining_steps == 0
 
     def action(self):
-        if self.check_is_done():
-            raise Exception("Game over")
-
-        self.remaining_steps -= 1
         return self.casino.table.play_hand()

@@ -1,5 +1,6 @@
 from environment import Environment
 from project import Player
+from typing import List
 
 
 class Agent:
@@ -10,10 +11,16 @@ class Agent:
         super().__init__()
         self.internal_player = player
 
+    def get_reward(self, action: List[Player]) -> int:
+        for player in action:
+            if player.player_id == self.internal_player.player_id:
+                return player.get_last_hand_res()
+
+    def get_hands_played(self) -> int:
+        return self.internal_player.get_hands_played()
+
+    def type_as_str(self):
+        return self.internal_player.type_as_str()
+
     def step(self, ob: Environment):
-        curr_obs = ob.get_observation()
-        print(curr_obs)
-        curr_action = ob.get_actions()
-        print(curr_action)
-        curr_reward = ob.action()
-        self.total_reward += curr_reward[0]
+        self.total_reward += self.get_reward(ob.action())
