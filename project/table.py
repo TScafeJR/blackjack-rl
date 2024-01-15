@@ -1,48 +1,43 @@
 from __future__ import annotations
-from .deck import Deck
-from .dealer import Dealer
-from .player import Player, PlayerDecision
-from .error import Errors
 from typing import List
 from enum import Enum
 import json
-
+from .deck import Deck
+from .dealer import Dealer
+from .player import Player, PlayerDecision
+from .game import Game
 
 class HandResult(Enum):
     UNSPECIFIED = "unspecified"
     PUSH = "push"
-    BUST = "player bust"
-    DEALER_WIN = "dealer win"
-    PLAYER_WIN = "player win"
-    PLAYER_BLACKJACK = "player blackjack"
-    DEALER_BUST = "dealer bust"
+    BUST = "player_bust"
+    DEALER_WIN = "dealer_win"
+    PLAYER_WIN = "player_win"
+    PLAYER_BLACKJACK = "player_blackjack"
+    DEALER_BUST = "dealer_bust"
 
 
 class Table:
-    BLACKJACK_SCORE = 21
-
     def __init__(self, num_decks: int, minimum_bet: int):
-        self.num_decks = num_decks
         self.minimum_bet = minimum_bet
         self.table_pot = 0
         self.hands_played = 0
-        self.cards = []
+        self.cards: Deck = Deck()
         self.dealer = None
         self.players: List[Player] = []
         self.hand_results = {}
         self.card_tracker = {}
-        self.add_decks()
+        self.handle_init(num_decks)
+
+    def handle_init(self, num_decks: int):
+        self.add_decks(num_decks)
         self.config_results_map()
 
-    def add_decks(self) -> None:
-        table_deck = Deck()
-
-        if self.num_decks != 1:
-            for _ in range(self.num_decks - 1):
+    def add_decks(self, num_decks: int) -> None:
+        if num_decks != 1:
+            for _ in range(num_decks - 1):
                 new_deck = Deck()
-                table_deck.combine_deck_and_shuffle(new_deck)
-
-        self.cards = table_deck
+                self.cards.combine_deck_and_shuffle(new_deck)
 
     def add_dealer(self, new_dealer: Dealer) -> Table:
         self.dealer = new_dealer
@@ -65,8 +60,7 @@ class Table:
 
     def collect_cards(self):
         if self.dealer is None:
-            Errors.value_undefined("Dealer")
-            return
+            raise Exception("Dealer is not defined")
 
         self.dealer.return_cards()
 
@@ -92,7 +86,7 @@ class Table:
         print(f"hand results: {json.dumps(self.hand_results, indent=4)}")
 
         # view card distribution / frequency
-        print(f"card distribution results: {json.dumps(self.card_tracker, indent=4)}")
+        # print(f"card distribution results: {json.dumps(self.card_tracker, indent=4)}")
         print(f"player money {self.players[0].get_money()}")
         print(f"house money {self.table_pot}")
 
@@ -103,20 +97,27 @@ class Table:
     def player_can_play_hand(player: Player) -> bool:
         return player.get_money() >= 0
 
+    def take_bets(self, deck: Deck) -> dict:
+        bets = {}
+        for player in self.players:
+            if not self.player_can_play_hand(player):
+                player.handle_hand_skipped()
+                continue
+            if self.dealer is None:
+                raise Exception("Dealer is not defined")
+
+            self.dealer.deal_player_initial_cards(player, deck)
+            player_bet = player.submit_bet()
+            self.receive_money(player_bet)
+            bets[player.player_id] = player_bet
+        return bets
+
     def play_hand(self) -> List[int]:
         if self.dealer is not None and len(self.players) > 0:
             dealer = self.dealer
             deck = self.cards
 
-            bets = {}
-            for player in self.players:
-                if not self.player_can_play_hand(player):
-                    player.handle_hand_skipped()
-                    continue
-                dealer.deal_player_initial_cards(player, deck)
-                player_bet = player.submit_bet()
-                self.receive_money(player_bet)
-                bets[player.player_id] = player_bet
+            bets = self.take_bets(deck)
 
             dealer.deal_self_cards(deck)
 
@@ -127,17 +128,15 @@ class Table:
                 player_turn_result = HandResult.UNSPECIFIED
 
                 while player_in_turn:
-                    player_hand_total = player.get_hand_value()
-                    if player_hand_total == self.BLACKJACK_SCORE:
+                    if player.has_blackjack():
                         player_turn_result = HandResult.PLAYER_BLACKJACK
                         break
 
-                    player_decision = player.make_decision()
+                    player_decision = player.make_decision(self.minimum_bet)
 
                     if player_decision == PlayerDecision.HIT:
                         dealer.deal_player_card(player, deck)
-                        player_hand_total = player.get_hand_value()
-                        if player_hand_total > self.BLACKJACK_SCORE:
+                        if player.has_bust_hand():
                             player_in_turn = False
                             player_turn_result = HandResult.BUST
                             break
@@ -150,8 +149,8 @@ class Table:
                         double_down_transfer = player.submit_bet()
                         self.receive_money(double_down_transfer)
                         player_in_turn = False
-                        player_hand_total = player.get_hand_value()
-                        if player_hand_total > self.BLACKJACK_SCORE:
+
+                        if player.has_bust_hand():
                             player_turn_result = HandResult.BUST
                         break
 
@@ -169,9 +168,7 @@ class Table:
                 dealer_in_turn = True
 
                 while dealer_in_turn:
-                    dealer_hand_total = dealer.get_hand_value()
-
-                    if dealer_hand_total < 17:
+                    if dealer.can_hit():
                         dealer.deal_self_card(deck)
                     else:
                         dealer_in_turn = False
@@ -187,7 +184,7 @@ class Table:
                 player_hand_total = player.get_hand_value()
                 dealer_hand_total = dealer.get_hand_value()
 
-                if dealer_hand_total > self.BLACKJACK_SCORE:
+                if dealer.has_bust_hand():
                     player_turn_result = HandResult.DEALER_BUST
                     self.track_hand(player_turn_result)
                     continue

@@ -1,0 +1,3 @@
+class Game:
+    BLACKJACK_SCORE = 21
+    DEALER_HIT_CEIL = 16

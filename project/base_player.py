@@ -1,40 +1,29 @@
 from typing import List
 from .card import Card
+from .hand import Hand
 
 
 class BasePlayer:
     def __init__(self):
-        self.cards = []
+        self.hand = Hand()
 
     def receive_card(self, new_card: Card) -> None:
-        self.cards.append(new_card)
+        self.hand.add_card(new_card)
 
-    def return_cards(self) -> List[int]:
-        self.cards = []
+    def return_cards(self) -> List[Card]:
+        return self.hand.return_cards()
 
     def see_hand(self) -> List[Card]:
-        return list(map(lambda x: x.to_string(), self.cards))
+        return self.hand.show_cards()
+
+    def get_hand_values(self) -> List[int]:
+        return self.hand.get_values()
+
+    def has_blackjack(self) -> bool:
+        return self.hand.includes_blackjack()
+
+    def has_bust_hand(self) -> bool:
+        return self.hand.is_bust()
 
     def get_hand_value(self) -> int:
-        non_ace_cards = []
-        num_aces = 0
-
-        for card in self.cards:
-            if card.get_display() == "A":
-                num_aces += 1
-            else:
-                non_ace_cards.append(card)
-
-        non_ace_total = 0
-        for card in non_ace_cards:
-            non_ace_total += card.get_value()
-
-        if num_aces > 0:
-            if non_ace_total + 11 + (num_aces - 1) * 1 <= 21:
-                ace_value = 11 + (num_aces - 1) * 1
-            else:
-                ace_value = num_aces * 1
-        else:
-            ace_value = 0
-
-        return non_ace_total + ace_value
+        return self.hand.get_high_value()

@@ -1,6 +1,7 @@
 from .base_player import BasePlayer
 from .deck import Deck
 from .card import Card
+from .game import Game
 
 
 class Dealer(BasePlayer):
@@ -47,3 +48,11 @@ class Dealer(BasePlayer):
 
     def deal_self_card(self, deck: Deck) -> None:
         self.deal_player_card(self, deck)
+
+    def can_hit(self) -> bool:
+        count = 0
+        for val in self.get_hand_values():
+            if val <= Game.DEALER_HIT_CEIL:
+                count += 1
+
+        return count > 0

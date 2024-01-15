@@ -13,11 +13,11 @@ class Card:
 
     def get_value(self) -> List[int]:
         if self.display == "A":
-            return 0
+            return [1, 11]
         if self.display in self.special_cards:
-            return 10
-        else:
-            return int(self.display)
+            return [10]
 
-    def to_string(self):
+        return [int(self.display)]
+
+    def to_string(self) -> str:
         return f"{self.display} of {self.suit}"

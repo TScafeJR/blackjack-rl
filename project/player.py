@@ -1,7 +1,7 @@
-from enum import Enum
 import random
-from .base_player import BasePlayer
 import uuid
+from enum import Enum
+from .base_player import BasePlayer
 
 
 class PlayerDecision(Enum):
@@ -29,12 +29,15 @@ class Player(BasePlayer):
         self.player_type = player_type
         self.hands_played = 0
 
-    def make_decision(self) -> PlayerDecision:
+    def make_decision(self, min_bet: int) -> PlayerDecision:
         if self.player_type == PlayerType.NOOB:
             return PlayerDecision.HIT
         if self.player_type == PlayerType.APPREHENSIVE:
             return PlayerDecision.STAY
         if self.player_type == PlayerType.AGGRESSIVE:
+            if self.money < min_bet*2:
+                return PlayerDecision.HIT
+
             return PlayerDecision.DOUBLE_DOWN
 
         return random.choice(list(PlayerDecision))
