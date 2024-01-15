@@ -1,5 +1,5 @@
 from environment import Environment
-from project import Player
+from project import Player, Table
 from typing import List
 
 
@@ -11,12 +11,16 @@ class Agent:
         super().__init__()
         self.internal_player = player
 
+    def select_action(self, observation: Table):
+        return self.internal_player.make_decision(observation.minimum_bet)
+
+    def update_knowledge(self, reward, new_observation):
+        pass
+
     def get_reward(self, action: List[Player]) -> int:
         for player in action:
             if player.player_id == self.internal_player.player_id:
                 return player.get_last_hand_res()
-            return 0
-        return 0
 
     def get_hands_played(self) -> int:
         return self.internal_player.get_hands_played()
