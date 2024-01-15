@@ -20,7 +20,7 @@ class BasePlayer:
         num_aces = 0
 
         for card in self.cards:
-            if card.get_display() == 'A':
+            if card.get_display() == "A":
                 num_aces += 1
             else:
                 non_ace_cards.append(card)

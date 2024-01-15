@@ -75,3 +75,4 @@ class Player(BasePlayer):
             return "AGGRESSIVE"
         if self.player_type == PlayerType.RANDOM:
             return "RANDOM"
+        return "UNKNOWN"

@@ -2,6 +2,7 @@ from __future__ import annotations
 from .deck import Deck
 from .dealer import Dealer
 from .player import Player, PlayerDecision
+from .error import Errors
 from typing import List
 from enum import Enum
 import json
@@ -37,7 +38,7 @@ class Table:
         table_deck = Deck()
 
         if self.num_decks != 1:
-            for n in range(self.num_decks - 1):
+            for _ in range(self.num_decks - 1):
                 new_deck = Deck()
                 table_deck.combine_deck_and_shuffle(new_deck)
 
@@ -63,6 +64,10 @@ class Table:
         winner.receive_winnings(amount)
 
     def collect_cards(self):
+        if self.dealer is None:
+            Errors.value_undefined("Dealer")
+            return
+
         self.dealer.return_cards()
 
         for player in self.players:
@@ -80,19 +85,16 @@ class Table:
         return self.table_pot
 
     def get_stats(self):
-        return {
-            'hands_played': self.hands_played,
-            'hand_results': self.hand_results
-        }
+        return {"hands_played": self.hands_played, "hand_results": self.hand_results}
 
     def view_stats(self):
-        print(f'hands played: {self.hands_played}')
-        print(f'hand results: {json.dumps(self.hand_results, indent=4)}')
+        print(f"hands played: {self.hands_played}")
+        print(f"hand results: {json.dumps(self.hand_results, indent=4)}")
 
         # view card distribution / frequency
-        print(f'card distribution results: {json.dumps(self.card_tracker, indent=4)}')
-        print(f'player money {self.players[0].get_money()}')
-        print(f'house money {self.table_pot}')
+        print(f"card distribution results: {json.dumps(self.card_tracker, indent=4)}")
+        print(f"player money {self.players[0].get_money()}")
+        print(f"house money {self.table_pot}")
 
     def get_results_of_all_player_hands(self) -> List[Player]:
         return self.players

@@ -12,7 +12,7 @@ class Card:
         return self.display
 
     def get_value(self) -> List[int]:
-        if self.display == 'A':
+        if self.display == "A":
             return 0
         if self.display in self.special_cards:
             return 10
@@ -20,4 +20,4 @@ class Card:
             return int(self.display)
 
     def to_string(self):
-        return f'{self.display} of {self.suit}'
+        return f"{self.display} of {self.suit}"

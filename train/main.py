@@ -23,6 +23,7 @@ if __name__ == '__main__':
         conservative_player,
         noob_player
     ]
+
     agents = [Agent(player) for player in players]
 
     # Add players to the table

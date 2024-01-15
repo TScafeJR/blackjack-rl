@@ -15,6 +15,8 @@ class Agent:
         for player in action:
             if player.player_id == self.internal_player.player_id:
                 return player.get_last_hand_res()
+            return 0
+        return 0
 
     def get_hands_played(self) -> int:
         return self.internal_player.get_hands_played()

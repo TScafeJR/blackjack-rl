@@ -1,5 +1,6 @@
 from project import Casino
 from typing import List
+from project import Player
 
 
 class Environment:
@@ -7,7 +8,7 @@ class Environment:
         self.remaining_steps = 100
         self.casino = casino
 
-    def get_agents(self):
+    def get_agents(self) -> List[Player]:
         return self.casino.table.get_players()
 
     def get_observation(self) -> List[float]:
