@@ -9,6 +9,7 @@ class Environment:
         self.casino = casino
 
     def reset(self):
+        self.remaining_steps = 100
         pass
 
     def get_agents(self) -> List[Player]:

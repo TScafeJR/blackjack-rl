@@ -1,14 +1,14 @@
 from __future__ import annotations
-from typing import List
+from typing import List, Self
 import json
 from .deck import Deck
 from .dealer import Dealer
-from .player import Player, PlayerDecision
+from .player import Player
 from .game import HandResult
 
 
 class BaseTable:
-    def __init__(self, num_decks: int, minimum_bet: int):
+    def __init__(self, num_decks: int, minimum_bet: int, maximum_bet: int = 100):
         self.minimum_bet = minimum_bet
         self.table_pot = 0
         self.hands_played = 0
@@ -18,6 +18,7 @@ class BaseTable:
         self.hand_results = {}
         self.card_tracker = {}
         self.handle_init(num_decks)
+        self.maximum_bet = maximum_bet
 
     def handle_init(self, num_decks: int):
         self.add_decks(num_decks)
@@ -29,18 +30,18 @@ class BaseTable:
                 new_deck = Deck()
                 self.cards.combine_deck_and_shuffle(new_deck)
 
-    def add_dealer(self, new_dealer: Dealer) -> BaseTable:
+    def add_dealer(self, new_dealer: Dealer) -> Self:
         self.dealer = new_dealer
         return self
 
-    def add_player(self, new_player: Player) -> BaseTable:
+    def add_player(self, new_player: Player) -> Self:
         self.players.append(new_player)
         return self
 
     def get_players(self) -> List[Player]:
         return self.players
 
-    def receive_money(self, amount_deposit: int) -> BaseTable:
+    def receive_money(self, amount_deposit: int) -> Self:
         self.table_pot += amount_deposit
         return self
 
@@ -76,7 +77,7 @@ class BaseTable:
         print(f"hand results: {json.dumps(self.hand_results, indent=4)}")
 
         # view card distribution / frequency
-        # print(f"card distribution results: {json.dumps(self.card_tracker, indent=4)}")
+        print(f"card distribution results: {json.dumps(self.card_tracker, indent=4)}")
         for i, player in enumerate(self.players):
             print(f"player {i} money {player.get_money()}")
 
@@ -122,101 +123,6 @@ class BaseTable:
             self.receive_money(player_bet)
             bets[player.player_id] = player_bet
         return bets
-
-    def play_hand(self) -> List[Player]:
-        if self.dealer is not None and len(self.players) > 0:
-            dealer = self.dealer
-            deck = self.cards
-
-            bets = self.take_bets(deck)
-
-            dealer.deal_self_cards(deck)
-
-            for player in self.players:
-                if not self.player_can_play_hand(player):
-                    continue
-                player_in_turn = True
-                player_turn_result = HandResult.UNSPECIFIED
-
-                while player_in_turn:
-                    if player.has_blackjack():
-                        player_turn_result = HandResult.PLAYER_BLACKJACK
-                        break
-
-                    player_decision = player.make_decision(self.minimum_bet)
-
-                    if player_decision == PlayerDecision.HIT:
-                        dealer.deal_player_card(player, deck)
-                        if player.has_bust_hand():
-                            player_in_turn = False
-                            player_turn_result = HandResult.BUST
-                            break
-                    elif player_decision == PlayerDecision.STAY:
-                        player_in_turn = False
-                        break
-                    elif player_decision == PlayerDecision.DOUBLE_DOWN:
-                        dealer.deal_player_card(player, deck)
-                        bets[player.player_id] *= 2
-                        double_down_transfer = player.submit_bet()
-                        self.receive_money(double_down_transfer)
-                        player_in_turn = False
-
-                        if player.has_bust_hand():
-                            player_turn_result = HandResult.BUST
-                        break
-
-                player_hand = player.see_hand()
-
-                for card in player_hand:
-                    if card in self.card_tracker:
-                        self.card_tracker[card] += 1
-                    else:
-                        self.card_tracker[card] = 1
-
-                if player_turn_result == HandResult.BUST:
-                    self.track_hand(player_turn_result)
-                    continue
-
-                dealer_in_turn = True
-
-                while dealer_in_turn:
-                    if dealer.can_hit():
-                        dealer.deal_self_card(deck)
-                    else:
-                        dealer_in_turn = False
-                        break
-
-                dealer_hand = dealer.see_hand()
-                for card in dealer_hand:
-                    if card in self.card_tracker:
-                        self.card_tracker[card] += 1
-                    else:
-                        self.card_tracker[card] = 1
-
-                player_hand_total = player.get_hand_value()
-                dealer_hand_total = dealer.get_hand_value()
-
-                if dealer.has_bust_hand():
-                    player_turn_result = HandResult.DEALER_BUST
-                    self.track_hand(player_turn_result)
-                    continue
-
-                if player_hand_total == dealer_hand_total:
-                    player_turn_result = HandResult.PUSH
-                    self.disperse_winnings(player, bets[player.player_id])
-                elif player_turn_result == HandResult.PLAYER_BLACKJACK:
-                    self.disperse_winnings(player, bets[player.player_id] * 2.5)
-                elif player_hand_total < dealer_hand_total:
-                    player_turn_result = HandResult.DEALER_WIN
-                elif player_hand_total > dealer_hand_total:
-                    player_turn_result = HandResult.PLAYER_WIN
-                    self.disperse_winnings(player, bets[player.player_id] * 2)
-
-                self.track_hand(player_turn_result)
-
-            self.collect_cards()
-            return self.get_results_of_all_player_hands()
-        return []
 
     def any_players_can_play(self) -> bool:
         for p in self.players:

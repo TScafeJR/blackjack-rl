@@ -24,23 +24,24 @@ class Hand:
 
             for value in card_values:
                 for total in possible_totals:
-                    new_total = total + value
-                    if new_total <= 21:
-                        new_totals.append(new_total)
+                    new_totals.append(total + value)
 
-            possible_totals = new_totals or possible_totals
+            possible_totals = new_totals
 
-        if possible_totals:
-            return list(set(possible_totals))
-        else:
-            return [min(sum(card.get_value()) for card in self.cards)]
+        # Remove duplicates and sort the possible totals
+        possible_totals = list(set(possible_totals))
+        possible_totals.sort()
+
+        return possible_totals
 
     def get_high_value(self) -> int:
         vals = self.get_values()
         highest_valid_hand_val = vals[0]
+        
         for val in vals:
-            if val > highest_valid_hand_val and highest_valid_hand_val <= Game.BLACKJACK_SCORE:
+            if val > highest_valid_hand_val and val <= Game.BLACKJACK_SCORE:
                 highest_valid_hand_val = val
+
         return highest_valid_hand_val
 
     def includes_blackjack(self) -> bool:
@@ -52,13 +53,7 @@ class Hand:
         return False
 
     def is_bust(self) -> bool:
-        vals = self.get_values()
-        bust_vals = 0
-        for val in vals:
-            if val > Game.BLACKJACK_SCORE:
-                bust_vals += 1
-
-        return bust_vals == len(self.cards)
+        return self.get_high_value() > Game.BLACKJACK_SCORE
 
     def show_cards(self) -> List[Card]:
         return list(map(lambda x: x.to_string(), self.cards))

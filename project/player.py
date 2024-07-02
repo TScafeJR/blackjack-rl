@@ -2,12 +2,16 @@ import random
 import uuid
 from enum import Enum
 from .base_player import BasePlayer
+from .game import DecisionInfo, TurnStage
+from typing import Self
 
 
 class PlayerDecision(Enum):
+    UNDEFINED = 0
     HIT = 1
     STAY = 2
     DOUBLE_DOWN = 3
+    SUBMIT_BET = 4
 
 
 class PlayerType(Enum):
@@ -15,6 +19,26 @@ class PlayerType(Enum):
     APPREHENSIVE = 2
     AGGRESSIVE = 3
     RANDOM = 4
+
+
+class DecisionResult:
+    def __init__(self, player):
+        self.player = player
+        self.decision = None
+        self.reward = 0
+        self.bet_amount = 0
+
+    def set_decision(self, decision: PlayerDecision) -> Self:
+        self.decision = decision
+        return self
+
+    def set_reward(self, reward: int) -> Self:
+        self.reward = reward
+        return self
+
+    def set_bet_amount(self, bet_amount: int) -> Self:
+        self.bet_amount = bet_amount
+        return self
 
 
 class Player(BasePlayer):
@@ -28,19 +52,34 @@ class Player(BasePlayer):
         self.player_id = str(uuid.uuid4())
         self.player_type = player_type
         self.hands_played = 0
+        self.playing = False
 
-    def make_decision(self, min_bet: int) -> PlayerDecision:
-        if self.player_type == PlayerType.NOOB:
-            return PlayerDecision.HIT
-        if self.player_type == PlayerType.APPREHENSIVE:
-            return PlayerDecision.STAY
-        if self.player_type == PlayerType.AGGRESSIVE:
-            if self.money < min_bet*2:
-                return PlayerDecision.HIT
+    def __make_bet(self) -> int:
+        return self.submit_bet()
+    
+    def set_playing(self, playing: bool) -> None:
+        self.playing = playing
 
-            return PlayerDecision.DOUBLE_DOWN
+    def make_decision(self, decision_info: DecisionInfo) -> DecisionResult:
+        decision_result = DecisionResult(self)
 
-        return random.choice(list(PlayerDecision))
+        if decision_info.stage == TurnStage.SUBMITTING_BET: 
+            return decision_result.set_decision(PlayerDecision.SUBMIT_BET).set_bet_amount(self.__make_bet())
+
+        if decision_info.stage == TurnStage.PLAYING:
+            if self.player_type == PlayerType.NOOB:
+                return decision_result.set_decision(PlayerDecision.HIT)
+            if self.player_type == PlayerType.APPREHENSIVE:
+                return decision_result.set_decision(PlayerDecision.STAY)
+            if self.player_type == PlayerType.AGGRESSIVE:
+                if self.money < decision_info.min_bet*2:
+                    return decision_result.set_decision(PlayerDecision.HIT)
+
+                return decision_result.set_decision(PlayerDecision.DOUBLE_DOWN)
+
+            return decision_result.set_decision(random.choice(list(PlayerDecision)))
+
+        return decision_result.set_decision(PlayerDecision.UNDEFINED)
 
     def get_money(self) -> int:
         return self.money
