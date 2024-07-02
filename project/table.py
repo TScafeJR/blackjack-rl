@@ -1,19 +1,17 @@
 from __future__ import annotations
-from typing import List
-from .player import Player, PlayerDecision
+from .player import PlayerDecision
 from .base_table import BaseTable
 from .game import HandResult, DecisionInfo, TurnStage
 
 
 class Table(BaseTable):
-    def __init__(self, num_decks: int, minimum_bet: int):
-        super().__init__(num_decks, minimum_bet)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.turn_stage = TurnStage.UNSPECIFIED
         self.active_bets = {}
         self.active_players = []
 
-    def play_hand(self) -> List[Player]:
-
+    def play_hand(self):
         if self.dealer is not None and len(self.players) > 0:
             dealer = self.dealer
             deck = self.cards
@@ -26,17 +24,30 @@ class Table(BaseTable):
 
             for player in self.active_players:
                 self.turn_stage = TurnStage.SUBMITTING_BET
-                decision = DecisionInfo(self.minimum_bet, self.maximum_bet, self.turn_stage)
+                decision = DecisionInfo(
+                    min_bet=self.minimum_bet,
+                    max_bet=self.maximum_bet,
+                    stage=self.turn_stage,
+                )
                 decision_info = player.make_decision(decision)
                 player.set_playing(True)
                 self.take_player_bet(player, decision_info.bet_amount)
                 player_turn_result = HandResult.UNSPECIFIED
                 self.dealer.deal_player_initial_cards(player, deck)
+
+                self.turn_stage = TurnStage.PLAYING
                 while player.playing:
-                    self.turn_stage = TurnStage.PLAYING
-                    decision = DecisionInfo(self.minimum_bet, self.maximum_bet, self.turn_stage)
+                    decision = DecisionInfo(
+                        min_bet=self.minimum_bet,
+                        max_bet=self.maximum_bet,
+                        stage=self.turn_stage,
+                    )
                     decision_info = player.make_decision(decision)
                     player_decision = decision_info.decision
+
+                    if player.has_blackjack():
+                        player_turn_result = HandResult.PLAYER_BLACKJACK
+                        break
                     if player_decision == PlayerDecision.HIT:
                         dealer.deal_player_card(player, deck)
                         if player.has_bust_hand():
@@ -68,6 +79,7 @@ class Table(BaseTable):
                     self.track_hand(player_turn_result)
                     continue
                 dealer_in_turn = True
+
                 while dealer_in_turn:
                     if dealer.can_hit():
                         dealer.deal_self_card(deck)
@@ -90,12 +102,16 @@ class Table(BaseTable):
                     player_turn_result = HandResult.PUSH
                     self.disperse_winnings(player, self.active_bets[player.player_id])
                 elif player_turn_result == HandResult.PLAYER_BLACKJACK:
-                    self.disperse_winnings(player, self.active_bets[player.player_id] * 2.5)
+                    self.disperse_winnings(
+                        player, self.active_bets[player.player_id] * 2.5
+                    )
                 elif player_hand_total < dealer_hand_total:
                     player_turn_result = HandResult.DEALER_WIN
                 elif player_hand_total > dealer_hand_total:
                     player_turn_result = HandResult.PLAYER_WIN
-                    self.disperse_winnings(player, self.active_bets[player.player_id] * 2)
+                    self.disperse_winnings(
+                        player, self.active_bets[player.player_id] * 2
+                    )
 
                 self.track_hand(player_turn_result)
 
@@ -116,10 +132,10 @@ class Table(BaseTable):
         return self.any_players_can_play() and self.get_money() > 0
 
     def get_hands_played(self) -> int:
-        return self.get_stats()['hands_played']
+        return self.get_stats()["hands_played"]
 
     def take_player_bet(self, player, bet_amount):
         if player.get_money() < bet_amount:
-            return 
+            return
         self.active_bets[player.player_id] = bet_amount
         self.receive_money(bet_amount)

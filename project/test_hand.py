@@ -128,7 +128,6 @@ class TestHand(unittest.TestCase):
         cards_str = self.hand.show_cards()
         self.assertEqual(cards_str, ["Q of Spades", "5 of Hearts"])
 
+
 if __name__ == "__main__":
     unittest.main()
-
-

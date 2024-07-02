@@ -8,8 +8,9 @@ from .game import HandResult
 
 
 class BaseTable:
-    def __init__(self, num_decks: int, minimum_bet: int, maximum_bet: int = 100):
-        self.minimum_bet = minimum_bet
+    def __init__(self, **kwargs):
+        self.minimum_bet = kwargs.get("minimum_bet", 0)
+        self.maximum_bet = kwargs.get("maximum_bet", 100)
         self.table_pot = 0
         self.hands_played = 0
         self.cards: Deck = Deck()
@@ -17,8 +18,7 @@ class BaseTable:
         self.players: List[Player] = []
         self.hand_results = {}
         self.card_tracker = {}
-        self.handle_init(num_decks)
-        self.maximum_bet = maximum_bet
+        self.handle_init(kwargs.get("num_decks", 1))
 
     def handle_init(self, num_decks: int):
         self.add_decks(num_decks)
@@ -102,8 +102,7 @@ class BaseTable:
             return 0
         elif player_turn_result == HandResult.BUST:
             return -bet
-        else:
-            raise Exception("Invalid hand result")
+        raise Exception("Invalid hand result")
 
     @staticmethod
     def player_can_play_hand(player: Player) -> bool:
@@ -134,4 +133,4 @@ class BaseTable:
         return self.any_players_can_play() and self.get_money() > 0
 
     def get_hands_played(self) -> int:
-        return self.get_stats()['hands_played']
+        return self.get_stats()["hands_played"]

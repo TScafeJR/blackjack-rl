@@ -6,10 +6,10 @@ class CustomEnvironment(Environment):
         super().__init__()
 
     def states(self):
-        return dict(type='float', shape=(8,))
+        return dict(type="float", shape=(8,))
 
     def actions(self):
-        return dict(type='int', num_values=4)
+        return dict(type="int", num_values=4)
 
     # Optional: should only be defined if environment has a natural fixed
     # maximum episode length; otherwise specify maximum number of training

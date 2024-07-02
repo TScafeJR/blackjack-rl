@@ -37,7 +37,7 @@ class Hand:
     def get_high_value(self) -> int:
         vals = self.get_values()
         highest_valid_hand_val = vals[0]
-        
+
         for val in vals:
             if val > highest_valid_hand_val and val <= Game.BLACKJACK_SCORE:
                 highest_valid_hand_val = val
@@ -57,3 +57,6 @@ class Hand:
 
     def show_cards(self) -> List[Card]:
         return list(map(lambda x: x.to_string(), self.cards))
+
+    def preview_card(self) -> Card:
+        return self.cards[0]

@@ -2,7 +2,7 @@ from environment import Environment
 from project import Casino, Player, Table, Dealer, PlayerType
 from agent import Agent
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     casino = Casino()
     NUM_STEPS = 1000
 
@@ -17,12 +17,7 @@ if __name__ == '__main__':
     noob_player = Player(starting_money, PlayerType.NOOB)
 
     # Create players and agents
-    players = [
-        random_player,
-        aggressive_player,
-        conservative_player,
-        noob_player
-    ]
+    players = [random_player, aggressive_player, conservative_player, noob_player]
 
     agents = [Agent(player) for player in players]
 
@@ -53,5 +48,7 @@ if __name__ == '__main__':
 
     # Print hands played by each agent
     for i, agent in enumerate(agents):
-        print(f"Player {agent.type_as_str()} hands played: {agent.get_hands_played()}, total reward: {agent.total_reward}")
-
+        print(
+            f"Player {agent.type_as_str()} hands played: {agent.get_hands_played()},"
+            f" total reward: {agent.total_reward}"
+        )

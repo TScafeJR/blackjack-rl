@@ -24,10 +24,10 @@ class TurnStage(Enum):
 
 
 class DecisionInfo:
-    def __init__(self, min_bet: int, max_bet: int, stage: TurnStage = TurnStage.SUBMITTING_BET):
-        self.min_bet = min_bet
-        self.max_bet = max_bet
-        self.stage = stage
+    def __init__(self, **kwargs):
+        self.min_bet = kwargs.get("min_bet", 10)
+        self.max_bet = kwargs.get("max_bet", 10)
+        self.stage = kwargs.get("stage", TurnStage.SUBMITTING_BET)
         self.player_bet = 0
         self.action_reward = 0
 

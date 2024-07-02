@@ -36,7 +36,7 @@ class Dealer(BasePlayer):
         self.deal_player_initial_cards(self, table_deck)
 
     def preview_card(self) -> Card:
-        return self.cards[0]
+        return self.hand.preview_card()
 
     @staticmethod
     def deal_player_card(player: BasePlayer, deck: Deck):

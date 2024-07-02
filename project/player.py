@@ -1,9 +1,9 @@
 import random
 import uuid
 from enum import Enum
+from typing import Self
 from .base_player import BasePlayer
 from .game import DecisionInfo, TurnStage
-from typing import Self
 
 
 class PlayerDecision(Enum):
@@ -45,26 +45,28 @@ class Player(BasePlayer):
     player_type: PlayerType
     player_id: str
 
-    def __init__(self, starting_money: int, player_type=PlayerType.RANDOM):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.money = starting_money
+        self.money = kwargs.get("starting_money", 0)
         self.last_hand_res = 0
         self.player_id = str(uuid.uuid4())
-        self.player_type = player_type
+        self.player_type = kwargs.get("player_type", PlayerType.RANDOM)
         self.hands_played = 0
         self.playing = False
 
     def __make_bet(self) -> int:
         return self.submit_bet()
-    
+
     def set_playing(self, playing: bool) -> None:
         self.playing = playing
 
     def make_decision(self, decision_info: DecisionInfo) -> DecisionResult:
         decision_result = DecisionResult(self)
 
-        if decision_info.stage == TurnStage.SUBMITTING_BET: 
-            return decision_result.set_decision(PlayerDecision.SUBMIT_BET).set_bet_amount(self.__make_bet())
+        if decision_info.stage == TurnStage.SUBMITTING_BET:
+            return decision_result.set_decision(
+                PlayerDecision.SUBMIT_BET
+            ).set_bet_amount(self.__make_bet())
 
         if decision_info.stage == TurnStage.PLAYING:
             if self.player_type == PlayerType.NOOB:
@@ -72,7 +74,7 @@ class Player(BasePlayer):
             if self.player_type == PlayerType.APPREHENSIVE:
                 return decision_result.set_decision(PlayerDecision.STAY)
             if self.player_type == PlayerType.AGGRESSIVE:
-                if self.money < decision_info.min_bet*2:
+                if self.money < decision_info.min_bet * 2:
                     return decision_result.set_decision(PlayerDecision.HIT)
 
                 return decision_result.set_decision(PlayerDecision.DOUBLE_DOWN)
