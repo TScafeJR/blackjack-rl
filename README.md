@@ -33,7 +33,7 @@ Everything below the reporting layer is standard library Python. The network mat
 | aggressive | 26,000 | -0.247 | 34.5% |
 | random | 24,000 | -0.281 | 32.8% |
 
-Both learners end up about 25 points of win rate above the baselines, and slightly EV positive because of this engine's dealer rule (see house rules). The full comparison and when I'd pick each algorithm is in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md).
+Both learners end up about 12 points of win rate above the baselines, and slightly EV positive because of this engine's dealer rule (see house rules). The full comparison and when I'd pick each algorithm is in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md).
 
 ![the network deciding](docs/img/board-decision.png)
 

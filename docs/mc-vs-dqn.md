@@ -21,7 +21,7 @@ From the 200,000 hand run (25 tables, 100 players, 4 worker processes, seed 7):
 
 \* last 20% of each agent's hands, after epsilon decayed. The full run average includes the early exploration phase, so it understates the final policy.
 
-They converge to basically the same play, about 25 points of win rate above random. The positive EV is real but it comes from the house rules: the dealer here hits any hand that could still total 16 or less, which includes soft 17 through soft 20. It busts constantly, and both agents learn to stand on stiff hands and wait for that to happen. MC busting less (10.4% vs 14.8%) is the same lesson learned a little more conservatively.
+They converge to basically the same play, about 13 points of win rate above random. The positive EV is real but it comes from the house rules: the dealer here hits any hand that could still total 16 or less, which includes soft 17 through soft 20. It busts constantly, and both agents learn to stand on stiff hands and wait for that to happen. MC busting less (10.4% vs 14.8%) is the same lesson learned a little more conservatively.
 
 ![rolling win rate](img/win_rates.png)
 
