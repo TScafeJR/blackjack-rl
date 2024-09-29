@@ -28,12 +28,15 @@ Everything below the reporting layer is standard library Python. The network mat
 
 | agent | hands | converged avg reward | converged win % |
 | --- | --- | --- | --- |
+| basic strategy* | 40,000 | +0.036 | 46.5% |
 | dqn | 100,000 | +0.020 | 45.9% |
 | mc | 50,000 | +0.008 | 45.6% |
 | aggressive | 26,000 | -0.247 | 34.5% |
 | random | 24,000 | -0.281 | 32.8% |
 
-Both learners end up about 12 points of win rate above the baselines, and slightly EV positive because of this engine's dealer rule (see house rules). The full comparison and when I'd pick each algorithm is in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md).
+\* textbook H17 basic strategy, evaluated separately under the same rules.
+
+Both learners end up about 13 points of win rate above the naive baselines and slightly EV positive because of this engine's dealer rule (see house rules). Textbook basic strategy still edges them out. The agents match it on 77% (dqn) and 71% (mc) of states, and the full comparison, the disagreement charts, and when I'd pick each algorithm are in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md).
 
 ![the network deciding](docs/img/board-decision.png)
 
@@ -70,6 +73,7 @@ The board is a local page served with the stdlib `http.server`, no extra depende
 
 - `dqn` - Deep Q-learning: the network predicts a value per action, trained off an experience replay buffer with a target network and epsilon-greedy exploration
 - `mc` - Monte Carlo control: the network regresses observed episode returns for each state/action visited
+- `basic` - textbook H17 basic strategy adapted to this action space, the strongest fixed benchmark
 - `noob` / `apprehensive` / `aggressive` / `random` - heuristic baselines (always hit, always stay, double when funded, and uniformly random)
 
 Learning agents see their hand total, a soft ace flag, the dealer upcard, and whether double down is available. Rewards are the hand's net profit as a fraction of the bet.

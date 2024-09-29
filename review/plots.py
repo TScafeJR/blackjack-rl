@@ -3,9 +3,9 @@ from typing import Dict, List
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Rectangle
 
-from project import Observation
+from project import Observation, Player, PlayerDecision
 from train.base_learner import build_network
 from train.config import LEARNING_KINDS
 from train.environment import encode_observation
@@ -22,6 +22,7 @@ KIND_COLORS = {
     "apprehensive": "#eda100",
     "aggressive": "#e87ba4",
     "random": "#008300",
+    "basic": "#4a3aa7",
 }
 FALLBACK_COLOR = "#4a3aa7"
 SURFACE = "#fcfcfb"
@@ -367,6 +368,126 @@ def plot_policy_charts(weights_by_kind: Dict[str, list], path: str) -> None:
     save_figure(figure, path)
 
 
+DECISION_TO_ACTION = {
+    PlayerDecision.HIT: 0,
+    PlayerDecision.STAY: 1,
+    PlayerDecision.DOUBLE_DOWN: 2,
+}
+
+
+def build_basic_grid(soft: bool) -> List[List[int]]:
+    totals = range(12, 22) if soft else range(4, 22)
+    grid = []
+    for total in totals:
+        row = []
+        for upcard in UPCARD_VALUES:
+            decision = Player.decide_basic_strategy(
+                Observation(
+                    player_total=total,
+                    is_soft=soft,
+                    dealer_upcard_value=upcard,
+                    can_double=True,
+                    money=1000,
+                )
+            )
+            row.append(DECISION_TO_ACTION[decision])
+        grid.append(row)
+    return grid
+
+
+def mark_disagreements(axes, grid, reference_grid) -> int:
+    disagreements = 0
+    for row_index, row in enumerate(grid):
+        for column_index, action_index in enumerate(row):
+            if action_index == reference_grid[row_index][column_index]:
+                continue
+            disagreements += 1
+            axes.add_patch(
+                Rectangle(
+                    (column_index - 0.5, row_index - 0.5),
+                    1,
+                    1,
+                    fill=False,
+                    edgecolor=INK,
+                    linewidth=1.6,
+                )
+            )
+    return disagreements
+
+
+def agreement_share(grids, reference_grids) -> float:
+    matches = 0
+    cells = 0
+    for grid, reference_grid in zip(grids, reference_grids):
+        for row, reference_row in zip(grid, reference_grid):
+            for action_index, reference_index in zip(row, reference_row):
+                cells += 1
+                if action_index == reference_index:
+                    matches += 1
+    return matches / cells
+
+
+def plot_policy_vs_basic(weights_by_kind: Dict[str, list], path: str) -> None:
+    kinds = sorted(weights_by_kind)
+    basic_grids = [build_basic_grid(soft=False), build_basic_grid(soft=True)]
+    figure, axes_grid = plt.subplots(
+        len(kinds) + 1, 2, figsize=(11, 5.2 * (len(kinds) + 1)), squeeze=False
+    )
+    figure.patch.set_facecolor(SURFACE)
+    draw_policy_panel(
+        axes_grid[0][0],
+        basic_grids[0],
+        list(range(4, 22)),
+        "basic strategy (H17 reference): hard totals",
+    )
+    draw_policy_panel(
+        axes_grid[0][1],
+        basic_grids[1],
+        list(range(12, 22)),
+        "basic strategy (H17 reference): soft totals",
+    )
+    for row_index, kind in enumerate(kinds, start=1):
+        network = build_network([32, 32], random.Random(0))
+        network.set_training(False).set_weights(weights_by_kind[kind])
+        grids = [
+            build_policy_grid(network, soft=False),
+            build_policy_grid(network, soft=True),
+        ]
+        share = agreement_share(grids, basic_grids)
+        draw_policy_panel(
+            axes_grid[row_index][0],
+            grids[0],
+            list(range(4, 22)),
+            f"{kind}: hard totals ({share * 100:.0f}% match overall)",
+        )
+        mark_disagreements(axes_grid[row_index][0], grids[0], basic_grids[0])
+        draw_policy_panel(
+            axes_grid[row_index][1],
+            grids[1],
+            list(range(12, 22)),
+            f"{kind}: soft totals (outlined = differs from basic)",
+        )
+        mark_disagreements(axes_grid[row_index][1], grids[1], basic_grids[1])
+    legend_patches = [
+        Patch(facecolor=color, label=label)
+        for color, label in zip(ACTION_COLORS, ACTION_LABELS)
+    ]
+    figure.legend(
+        handles=legend_patches,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        labelcolor=SECONDARY,
+    )
+    figure.suptitle(
+        "learned policy vs basic strategy (double assumed available)",
+        color=INK,
+        fontsize=12,
+    )
+    figure.tight_layout(rect=(0, 0.03, 1, 1))
+    save_figure(figure, path)
+
+
 def render_network_plots(run_store: RunStore) -> List[str]:
     weights_by_kind = load_weights_by_kind(run_store)
     if not weights_by_kind:
@@ -378,6 +499,9 @@ def render_network_plots(run_store: RunStore) -> List[str]:
     policy_path = run_store.plot_path("policy_charts.png")
     plot_policy_charts(weights_by_kind, policy_path)
     rendered.append(policy_path)
+    comparison_path = run_store.plot_path("policy_vs_basic.png")
+    plot_policy_vs_basic(weights_by_kind, comparison_path)
+    rendered.append(comparison_path)
     return rendered
 
 

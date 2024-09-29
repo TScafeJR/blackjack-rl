@@ -5,8 +5,8 @@ import unittest
 
 from train.base_learner import build_network
 
-from .plots import (build_policy_grid, render_all, render_network_plots,
-                    rolling_mean)
+from .plots import (build_basic_grid, build_policy_grid, render_all,
+                    render_network_plots, rolling_mean)
 from .run_store import RunStore
 
 
@@ -79,10 +79,11 @@ class TestRenderAll(unittest.TestCase):
 
             rendered = render_all(store)
 
-            self.assertEqual(len(rendered), 8)
+            self.assertEqual(len(rendered), 9)
             names = [os.path.basename(path) for path in rendered]
             self.assertIn("network_weights.png", names)
             self.assertIn("policy_charts.png", names)
+            self.assertIn("policy_vs_basic.png", names)
 
 
 class TestNetworkPlots(unittest.TestCase):
@@ -90,6 +91,17 @@ class TestNetworkPlots(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             store = RunStore(base_dir=temp_dir, run_name="no-weights")
             self.assertEqual(render_network_plots(store), [])
+
+    def test_build_basic_grid_matches_known_cells(self):
+        hard_grid = build_basic_grid(soft=False)
+        soft_grid = build_basic_grid(soft=True)
+
+        self.assertEqual(hard_grid[11 - 4][11 - 2], 2)
+        self.assertEqual(hard_grid[16 - 4][10 - 2], 0)
+        self.assertEqual(hard_grid[16 - 4][6 - 2], 1)
+        self.assertEqual(hard_grid[17 - 4][11 - 2], 1)
+        self.assertEqual(soft_grid[18 - 12][3 - 2], 2)
+        self.assertEqual(soft_grid[20 - 12][6 - 2], 1)
 
     def test_build_policy_grid_shapes(self):
         network = build_network([32, 32], random.Random(1))

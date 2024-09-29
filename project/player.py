@@ -20,6 +20,7 @@ class PlayerType(Enum):
     APPREHENSIVE = 2
     AGGRESSIVE = 3
     RANDOM = 4
+    BASIC = 5
 
 
 class DecisionResult:
@@ -56,6 +57,68 @@ class Player(BasePlayer):
         self.playing = False
 
     @staticmethod
+    def should_double_hard(observation) -> bool:
+        total = observation.player_total
+        upcard = observation.dealer_upcard_value
+        if not observation.can_double:
+            return False
+        if total == 11:
+            return True
+        if total == 10:
+            return upcard <= 9
+        return total == 9 and 3 <= upcard <= 6
+
+    @staticmethod
+    def decide_basic_hard(observation) -> PlayerDecision:
+        total = observation.player_total
+        upcard = observation.dealer_upcard_value
+        if Player.should_double_hard(observation):
+            return PlayerDecision.DOUBLE_DOWN
+        if total >= 17:
+            return PlayerDecision.STAY
+        if total >= 13:
+            return PlayerDecision.STAY if upcard <= 6 else PlayerDecision.HIT
+        if total == 12:
+            return PlayerDecision.STAY if 4 <= upcard <= 6 else PlayerDecision.HIT
+        return PlayerDecision.HIT
+
+    @staticmethod
+    def should_double_soft(observation) -> bool:
+        total = observation.player_total
+        upcard = observation.dealer_upcard_value
+        if not observation.can_double:
+            return False
+        if total == 19:
+            return upcard == 6
+        if total == 18:
+            return upcard <= 6
+        if total == 17:
+            return 3 <= upcard <= 6
+        if total in (15, 16):
+            return 4 <= upcard <= 6
+        return total in (13, 14) and 5 <= upcard <= 6
+
+    @staticmethod
+    def decide_basic_soft(observation) -> PlayerDecision:
+        total = observation.player_total
+        upcard = observation.dealer_upcard_value
+        if Player.should_double_soft(observation):
+            return PlayerDecision.DOUBLE_DOWN
+        if total >= 19:
+            return PlayerDecision.STAY
+        if total == 18:
+            return PlayerDecision.STAY if upcard <= 8 else PlayerDecision.HIT
+        return PlayerDecision.HIT
+
+    @staticmethod
+    def decide_basic_strategy(observation) -> PlayerDecision:
+        if observation is None:
+            return PlayerDecision.HIT
+        if observation.is_soft:
+            return Player.decide_basic_soft(observation)
+        return Player.decide_basic_hard(observation)
+
+    @staticmethod
     def decide_for_type(
         player_type: PlayerType, decision_info: DecisionInfo
     ) -> PlayerDecision:
@@ -69,6 +132,8 @@ class Player(BasePlayer):
             if money < decision_info.min_bet * 2:
                 return PlayerDecision.HIT
             return PlayerDecision.DOUBLE_DOWN
+        if player_type == PlayerType.BASIC:
+            return Player.decide_basic_strategy(decision_info.observation)
         return random.choice(list(PlayerDecision))
 
     def set_playing(self, playing: bool) -> None:
@@ -126,4 +191,6 @@ class Player(BasePlayer):
             return "AGGRESSIVE"
         if self.player_type == PlayerType.RANDOM:
             return "RANDOM"
+        if self.player_type == PlayerType.BASIC:
+            return "BASIC"
         return "UNKNOWN"

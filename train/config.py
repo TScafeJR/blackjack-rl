@@ -9,6 +9,7 @@ HEURISTIC_KINDS: Dict[str, PlayerType] = {
     "apprehensive": PlayerType.APPREHENSIVE,
     "aggressive": PlayerType.AGGRESSIVE,
     "random": PlayerType.RANDOM,
+    "basic": PlayerType.BASIC,
 }
 
 
