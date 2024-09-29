@@ -1,6 +1,6 @@
 .PHONY: py-lint
 py-lint:
-	pylint --rcfile=.pylintrc $(shell find . -name "*.py" -not -path "./venv/*" -print)
+	pylint --rcfile=.pylintrc $(shell find . -name "*.py" -not -path "./venv/*" -not -path "./notes/*" -print)
 
 .PHONY: py-format
 py-format:
@@ -10,3 +10,7 @@ py-format:
 py-lint-fix:
 	$(MAKE) py-format
 	$(MAKE) py-lint
+
+.PHONY: py-test
+py-test:
+	python -m unittest discover -s . -t . -p "test_*.py"

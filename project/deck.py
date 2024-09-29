@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import random
+from typing import List
+
 from .card import Card
 
 
 class Deck:
     def __init__(self):
         self.cards = self.add_cards()
-        self.discarded_cards = []
+        self.discarded_cards: List[Card] = []
+        self.shuffle_cards()
 
     @staticmethod
-    def add_cards():
-        suits = {"Spades", "Hearts", "Clubs", "Diamonds"}
-        displays = {"A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"}
+    def add_cards() -> List[Card]:
+        suits = ["Spades", "Hearts", "Clubs", "Diamonds"]
+        displays = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
         cards = []
 
         for suit in suits:
@@ -28,19 +31,15 @@ class Deck:
     def draw_card(self):
         if len(self.cards) == 0:
             self.shuffle_empty_deck()
-        discarded_card = self.cards.pop()
-        self.discarded_cards.append(discarded_card)
-        return discarded_card
+        drawn_card = self.cards.pop()
+        self.discarded_cards.append(drawn_card)
+        return drawn_card
 
     def combine_deck_and_shuffle(self, incoming_deck: Deck):
-        incoming_cards = incoming_deck.cards
-        self.cards.extend(incoming_cards)
+        self.cards.extend(incoming_deck.cards)
         self.shuffle_cards()
 
     def shuffle_empty_deck(self):
         self.cards = self.discarded_cards
         self.discarded_cards = []
         self.shuffle_cards()
-
-    def get_cards(self):
-        return self.cards

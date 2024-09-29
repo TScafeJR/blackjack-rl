@@ -1,4 +1,5 @@
 from typing import List
+
 from .card import Card
 from .hand import Hand
 
@@ -13,7 +14,7 @@ class BasePlayer:
     def return_cards(self) -> List[Card]:
         return self.hand.return_cards()
 
-    def see_hand(self) -> List[Card]:
+    def see_hand(self) -> List[str]:
         return self.hand.show_cards()
 
     def get_hand_values(self) -> List[int]:
@@ -21,6 +22,12 @@ class BasePlayer:
 
     def has_blackjack(self) -> bool:
         return self.hand.includes_blackjack()
+
+    def has_natural(self) -> bool:
+        return self.hand.is_natural()
+
+    def has_soft_hand(self) -> bool:
+        return self.hand.is_soft()
 
     def has_bust_hand(self) -> bool:
         return self.hand.is_bust()

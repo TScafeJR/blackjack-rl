@@ -1,13 +1,10 @@
 from .base_player import BasePlayer
-from .deck import Deck
 from .card import Card
+from .deck import Deck
 from .game import Game
 
 
 class Dealer(BasePlayer):
-    def __init__(self):
-        super().__init__()
-
     @staticmethod
     def deal_player_initial_cards(player: BasePlayer, table_deck: Deck) -> None:
         started_with_one = len(table_deck.cards) == 1

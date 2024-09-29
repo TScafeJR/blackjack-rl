@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
-from .hand import Hand
+
 from .card import Card
+from .hand import Hand
 
 
 class TestHand(unittest.TestCase):
@@ -116,6 +117,59 @@ class TestHand(unittest.TestCase):
         card3.get_value = MagicMock(return_value=[3])
 
         self.assertTrue(self.hand.is_bust())
+
+    def test_is_natural(self):
+        card1 = Card("A", "Spades")
+        card2 = Card("K", "Hearts")
+
+        self.hand.add_card(card1)
+        self.hand.add_card(card2)
+
+        # A two-card 21 is a natural blackjack
+        self.assertTrue(self.hand.is_natural())
+
+    def test_is_natural_three_card_21(self):
+        card1 = Card("5", "Spades")
+        card2 = Card("6", "Hearts")
+        card3 = Card("K", "Diamonds")
+
+        self.hand.add_card(card1)
+        self.hand.add_card(card2)
+        self.hand.add_card(card3)
+
+        # A 21 built from three cards is not a natural
+        self.assertFalse(self.hand.is_natural())
+
+    def test_is_soft(self):
+        card1 = Card("A", "Spades")
+        card2 = Card("6", "Hearts")
+
+        self.hand.add_card(card1)
+        self.hand.add_card(card2)
+
+        # Ace counted as 11 makes the hand soft
+        self.assertTrue(self.hand.is_soft())
+
+    def test_is_soft_forced_low_ace(self):
+        card1 = Card("A", "Spades")
+        card2 = Card("6", "Hearts")
+        card3 = Card("K", "Diamonds")
+
+        self.hand.add_card(card1)
+        self.hand.add_card(card2)
+        self.hand.add_card(card3)
+
+        # Ace must count as 1 to avoid busting, so the hand is hard
+        self.assertFalse(self.hand.is_soft())
+
+    def test_is_soft_no_ace(self):
+        card1 = Card("10", "Spades")
+        card2 = Card("7", "Hearts")
+
+        self.hand.add_card(card1)
+        self.hand.add_card(card2)
+
+        self.assertFalse(self.hand.is_soft())
 
     def test_show_cards(self):
         card1 = Card("Q", "Spades")

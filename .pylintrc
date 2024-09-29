@@ -99,10 +99,6 @@ recursive=no
 # source root.
 source-roots=
 
-# When enabled, pylint would attempt to guess common misconfiguration and emit
-# user-friendly hints instead of false-positive error messages.
-suggestion-mode=yes
-
 # Allow loading of arbitrary C extensions. Extensions are imported into the
 # active Python interpreter and may run arbitrary code.
 unsafe-load-any-extension=no
@@ -190,6 +186,7 @@ good-names=i,
            k,
            ex,
            Run,
+           do_GET,
            _
 
 # Good variable names regexes, separated by a comma. If names match any regex,
@@ -288,7 +285,7 @@ ignored-parents=
 max-args=5
 
 # Maximum number of attributes for a class (see R0902).
-max-attributes=7
+max-attributes=24
 
 # Maximum number of boolean expressions in an if statement (see R0916).
 max-bool-expr=5
@@ -303,7 +300,7 @@ max-locals=15
 max-parents=7
 
 # Maximum number of public methods for a class (see R0904).
-max-public-methods=20
+max-public-methods=35
 
 # Maximum number of return / yield for function / method body.
 max-returns=6
@@ -433,7 +430,10 @@ disable=raw-checker-failed,
         use-implicit-booleaness-not-comparison-to-zero,
 				missing-function-docstring,
 				missing-class-docstring,
-				missing-module-docstring
+				missing-module-docstring,
+				broad-exception-raised,
+				duplicate-code,
+				too-few-public-methods
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

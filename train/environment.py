@@ -1,36 +1,88 @@
-from project import Casino
-from typing import List
-from project import Player
+from typing import Dict, List, Optional
+
+from project import Observation, PendingTurn, PlayerDecision, TrainTable
+
+ACTION_DECISIONS = [
+    PlayerDecision.HIT,
+    PlayerDecision.STAY,
+    PlayerDecision.DOUBLE_DOWN,
+]
+ACTION_COUNT = len(ACTION_DECISIONS)
+FEATURE_COUNT = 4
 
 
-class Environment:
-    def __init__(self, casino: Casino):
-        self.remaining_steps = 100
-        self.casino = casino
+def encode_observation(observation: Observation) -> List[float]:
+    return [
+        observation.player_total / 21.0,
+        1.0 if observation.is_soft else 0.0,
+        observation.dealer_upcard_value / 11.0,
+        1.0 if observation.can_double else 0.0,
+    ]
 
-    def reset(self):
-        self.remaining_steps = 100
-        pass
 
-    def get_agents(self) -> List[Player]:
-        if self.casino.table is None:
-            return []
-        return self.casino.table.get_players()
+def encode_legal_actions(legal_actions: List[PlayerDecision]) -> List[int]:
+    return [ACTION_DECISIONS.index(decision) for decision in legal_actions]
 
-    def get_observation(self) -> List[float]:
-        return list(map(lambda p: p.get_money(), self.get_agents()))
 
-    def get_actions(self) -> List[int]:
-        return list(map(lambda p: p.get_last_hand_res(), self.get_agents()))
+class EpisodeStep:
+    def __init__(self, **kwargs):
+        self.features = kwargs.get("features", [])
+        self.action_index = kwargs.get("action_index", 0)
+        self.legal_action_indices = kwargs.get("legal_action_indices", [])
 
-    def check_is_done(self) -> bool:
-        return self.remaining_steps == 0
 
-    def action(self):
-        if self.casino.table is None:
-            return None
-        return self.casino.table.play_hand()
+class Episode:
+    def __init__(self, **kwargs):
+        self.player_id = kwargs.get("player_id", "")
+        self.agent_kind = kwargs.get("agent_kind", "")
+        self.steps: List[EpisodeStep] = kwargs.get("steps", [])
+        self.reward = kwargs.get("reward", 0.0)
+        self.outcome = kwargs.get("outcome", None)
 
-    def execute(self, actions):
-        terminal = self.casino.can_play_hand()
-        return self.get_observation(), terminal, self.get_actions()
+
+class BlackjackEnvironment:
+    def __init__(self, **kwargs):
+        self.table: TrainTable = kwargs.get("table")
+        self.policies: Dict[str, object] = kwargs.get("policies", {})
+        self.agent_kinds: Dict[str, str] = kwargs.get("agent_kinds", {})
+
+    def handle_pending_turn(
+        self, pending_turn: PendingTurn, episodes: Dict[str, Episode]
+    ) -> None:
+        features = encode_observation(pending_turn.observation)
+        legal_action_indices = encode_legal_actions(pending_turn.legal_actions)
+        policy = self.policies[pending_turn.player_id]
+        action_index = policy.select_action(pending_turn, features)
+        episodes[pending_turn.player_id].steps.append(
+            EpisodeStep(
+                features=features,
+                action_index=action_index,
+                legal_action_indices=legal_action_indices,
+            )
+        )
+        self.table.apply_decision(
+            pending_turn.player_id, ACTION_DECISIONS[action_index]
+        )
+
+    def play_hand(self) -> List[Episode]:
+        self.table.begin_hand()
+        episodes: Dict[str, Episode] = {}
+        for player in self.table.turn_order:
+            episodes[player.player_id] = Episode(
+                player_id=player.player_id,
+                agent_kind=self.agent_kinds.get(player.player_id, ""),
+                steps=[],
+            )
+
+        while True:
+            pending_turn: Optional[PendingTurn] = self.table.get_pending_turn()
+            if pending_turn is None:
+                break
+            self.handle_pending_turn(pending_turn, episodes)
+
+        outcomes = self.table.settle_hand()
+        for player_id, outcome in outcomes.items():
+            episode = episodes[player_id]
+            episode.reward = outcome.reward / outcome.bet
+            episode.outcome = outcome
+        return list(episodes.values())

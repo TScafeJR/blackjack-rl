@@ -2,6 +2,7 @@ import random
 import uuid
 from enum import Enum
 from typing import Self
+
 from .base_player import BasePlayer
 from .game import DecisionInfo, TurnStage
 
@@ -54,8 +55,21 @@ class Player(BasePlayer):
         self.hands_played = 0
         self.playing = False
 
-    def __make_bet(self) -> int:
-        return self.submit_bet()
+    @staticmethod
+    def decide_for_type(
+        player_type: PlayerType, decision_info: DecisionInfo
+    ) -> PlayerDecision:
+        if player_type == PlayerType.NOOB:
+            return PlayerDecision.HIT
+        if player_type == PlayerType.APPREHENSIVE:
+            return PlayerDecision.STAY
+        if player_type == PlayerType.AGGRESSIVE:
+            observation = decision_info.observation
+            money = observation.money if observation is not None else 0
+            if money < decision_info.min_bet * 2:
+                return PlayerDecision.HIT
+            return PlayerDecision.DOUBLE_DOWN
+        return random.choice(list(PlayerDecision))
 
     def set_playing(self, playing: bool) -> None:
         self.playing = playing
@@ -63,23 +77,10 @@ class Player(BasePlayer):
     def make_decision(self, decision_info: DecisionInfo) -> DecisionResult:
         decision_result = DecisionResult(self)
 
-        if decision_info.stage == TurnStage.SUBMITTING_BET:
-            return decision_result.set_decision(
-                PlayerDecision.SUBMIT_BET
-            ).set_bet_amount(self.__make_bet())
-
         if decision_info.stage == TurnStage.PLAYING:
-            if self.player_type == PlayerType.NOOB:
-                return decision_result.set_decision(PlayerDecision.HIT)
-            if self.player_type == PlayerType.APPREHENSIVE:
-                return decision_result.set_decision(PlayerDecision.STAY)
-            if self.player_type == PlayerType.AGGRESSIVE:
-                if self.money < decision_info.min_bet * 2:
-                    return decision_result.set_decision(PlayerDecision.HIT)
-
-                return decision_result.set_decision(PlayerDecision.DOUBLE_DOWN)
-
-            return decision_result.set_decision(random.choice(list(PlayerDecision)))
+            return decision_result.set_decision(
+                self.decide_for_type(self.player_type, decision_info)
+            )
 
         return decision_result.set_decision(PlayerDecision.UNDEFINED)
 
@@ -96,6 +97,12 @@ class Player(BasePlayer):
         self.last_hand_res = -bet_amount
         self.hands_played += 1
         return bet_amount
+
+    def add_to_bet(self, amount: int) -> int:
+        extra_amount = min(amount, self.money)
+        self.money = self.money - extra_amount
+        self.last_hand_res -= extra_amount
+        return extra_amount
 
     def receive_winnings(self, amount: int) -> None:
         self.money += amount

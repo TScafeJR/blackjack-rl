@@ -1,4 +1,5 @@
 from typing import List
+
 from .card import Card
 from .game import Game
 
@@ -28,7 +29,6 @@ class Hand:
 
             possible_totals = new_totals
 
-        # Remove duplicates and sort the possible totals
         possible_totals = list(set(possible_totals))
         possible_totals.sort()
 
@@ -39,7 +39,7 @@ class Hand:
         highest_valid_hand_val = vals[0]
 
         for val in vals:
-            if val > highest_valid_hand_val and val <= Game.BLACKJACK_SCORE:
+            if highest_valid_hand_val < val <= Game.BLACKJACK_SCORE:
                 highest_valid_hand_val = val
 
         return highest_valid_hand_val
@@ -52,10 +52,18 @@ class Hand:
 
         return False
 
+    def is_natural(self) -> bool:
+        return len(self.cards) == 2 and self.includes_blackjack()
+
+    def is_soft(self) -> bool:
+        vals = self.get_values()
+        high_value = self.get_high_value()
+        return high_value <= Game.BLACKJACK_SCORE and high_value != vals[0]
+
     def is_bust(self) -> bool:
         return self.get_high_value() > Game.BLACKJACK_SCORE
 
-    def show_cards(self) -> List[Card]:
+    def show_cards(self) -> List[str]:
         return list(map(lambda x: x.to_string(), self.cards))
 
     def preview_card(self) -> Card:

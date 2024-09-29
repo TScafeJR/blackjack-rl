@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blackjack-rl board</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0d0d0d; color: #ffffff; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  header {
+    width: 100%; display: flex; justify-content: space-between; align-items: baseline;
+    padding: 14px 22px; border-bottom: 1px solid rgba(255,255,255,0.10);
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .meta { color: #c3c2b7; font-size: 12px; }
+  .table-felt {
+    margin: 26px auto; width: min(960px, 94vw); border-radius: 200px 200px 24px 24px;
+    background: radial-gradient(ellipse at 50% 0%, #1e5c38 0%, #14432a 60%, #0f3520 100%);
+    border: 10px solid #241a12; box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+    padding: 34px 30px 26px; display: flex; flex-direction: column; gap: 26px;
+  }
+  .dealer-zone { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .zone-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+  .cards { display: flex; gap: 6px; min-height: 74px; }
+  .card {
+    width: 52px; height: 74px; border-radius: 6px; background: #fcfcfb; color: #0b0b0b;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 5px 6px;
+    font-size: 15px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    animation: land 220ms ease-out;
+  }
+  .card .suit { align-self: flex-end; font-size: 18px; }
+  .card.red { color: #c62828; }
+  .card.hole {
+    background: repeating-linear-gradient(45deg, #1c5cab, #1c5cab 6px, #184f95 6px, #184f95 12px);
+  }
+  @keyframes land { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .total-chip {
+    font-size: 12px; background: rgba(0,0,0,0.45); border-radius: 10px; padding: 2px 10px;
+    color: #fcfcfb; min-height: 18px;
+  }
+  .seats { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
+  .seat {
+    background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+    padding: 12px 14px; width: 200px; display: flex; flex-direction: column; align-items: center; gap: 7px;
+    transition: box-shadow 160ms, border-color 160ms;
+  }
+  .seat.active { border-color: #3987e5; box-shadow: 0 0 0 2px #3987e5, 0 0 24px rgba(57,135,229,0.35); }
+  .seat .kind { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .seat .money { font-size: 12px; color: #c3c2b7; }
+  .seat .money .delta { font-weight: 700; margin-left: 6px; }
+  .badge {
+    min-height: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    border-radius: 9px; padding: 2px 10px; text-transform: uppercase;
+  }
+  .badge.win { background: #0ca30c; color: #fff; }
+  .badge.lose { background: #d03b3b; color: #fff; }
+  .badge.push { background: #383835; color: #c3c2b7; }
+  .badge.blackjack { background: #c98500; color: #fff; }
+  .qpanel { width: 100%; display: none; flex-direction: column; gap: 4px; }
+  .qpanel.visible { display: flex; }
+  .qrow { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .qrow .qname { width: 44px; color: #c3c2b7; text-transform: uppercase; letter-spacing: 0.05em; }
+  .qrow .qbar-track { display: block; flex: 1; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.10); overflow: hidden; }
+  .qrow .qbar { display: block; height: 100%; border-radius: 4px; width: 0; transition: width 300ms ease; }
+  .qrow.hit .qbar { background: #3987e5; }
+  .qrow.stay .qbar { background: #d95926; }
+  .qrow.double .qbar { background: #199e70; }
+  .qrow .qval { width: 44px; text-align: right; color: #c3c2b7; font-variant-numeric: tabular-nums; }
+  .qrow.chosen .qname, .qrow.chosen .qval { color: #ffffff; font-weight: 700; }
+  .qrow.illegal { opacity: 0.35; }
+  .action-chip {
+    min-height: 20px; font-size: 12px; font-weight: 700; color: #3987e5; text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .controls {
+    display: flex; align-items: center; gap: 16px; padding: 4px 0 18px; color: #c3c2b7; font-size: 13px;
+  }
+  .history {
+    width: min(960px, 94vw); margin: 0 auto 34px; background: #1a1a19;
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px 16px;
+  }
+  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .history-head h2 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #c3c2b7; }
+  .history-head select {
+    font: inherit; font-size: 12px; color: #fff; background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 7px; padding: 4px 8px;
+  }
+  .history-scroll { max-height: 300px; overflow-y: auto; }
+  .history table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .history th {
+    text-align: left; color: #898781; font-weight: 600; padding: 4px 8px;
+    position: sticky; top: 0; background: #1a1a19;
+  }
+  .history td { padding: 4px 8px; border-top: 1px solid rgba(255,255,255,0.06); color: #c3c2b7; }
+  .history td.num { font-variant-numeric: tabular-nums; }
+  .history .cards-cell { color: #fff; letter-spacing: 0.04em; }
+  .history .cards-cell .red { color: #e66767; }
+  .history .pill {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; border-radius: 7px; padding: 1px 7px;
+  }
+  .history .pill.win { background: #0ca30c; color: #fff; }
+  .history .pill.lose { background: #d03b3b; color: #fff; }
+  .history .pill.push { background: #383835; color: #c3c2b7; }
+  .history .pill.blackjack { background: #c98500; color: #fff; }
+  .history .delta.up { color: #0ca30c; }
+  .history .delta.down { color: #e66767; }
+  .controls button {
+    font: inherit; font-weight: 600; color: #fff; background: #256abf; border: none;
+    border-radius: 9px; padding: 9px 22px; cursor: pointer;
+  }
+  .controls button:disabled { opacity: 0.45; cursor: default; }
+  .controls label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .controls input[type="range"] { accent-color: #3987e5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>blackjack-rl</h1>
+  <div class="meta" id="meta">loading…</div>
+</header>
+
+<div class="table-felt">
+  <div class="dealer-zone">
+    <div class="zone-label">Dealer</div>
+    <div class="cards" id="dealer-cards"></div>
+    <div class="total-chip" id="dealer-total"></div>
+  </div>
+  <div class="seats" id="seats"></div>
+</div>
+
+<div class="controls">
+  <button id="deal">Deal hand</button>
+  <label><input type="checkbox" id="auto"> auto-play</label>
+  <label>speed <input type="range" id="speed" min="1" max="5" value="2"></label>
+  <span id="hand-counter"></span>
+</div>
+
+<section class="history">
+  <div class="history-head">
+    <h2>Play history</h2>
+    <select id="history-filter"><option value="">all seats</option></select>
+  </div>
+  <div class="history-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>seat</th><th>cards</th><th>actions</th>
+          <th>dealer</th><th>result</th><th>+/-</th><th>bankroll</th>
+        </tr>
+      </thead>
+      <tbody id="history-rows"></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+const SUITS = { Spades: "♠", Clubs: "♣", Hearts: "♥", Diamonds: "♦" };
+const RESULT_BADGES = {
+  player_win: ["win", "win"], dealer_bust: ["win", "dealer bust"],
+  player_blackjack: ["blackjack", "blackjack"], push: ["push", "push"],
+  player_bust: ["lose", "bust"], dealer_win: ["lose", "lose"],
+};
+const seats = document.getElementById("seats");
+const dealButton = document.getElementById("deal");
+const autoBox = document.getElementById("auto");
+const speedSlider = document.getElementById("speed");
+const historyRows = document.getElementById("history-rows");
+const historyFilter = document.getElementById("history-filter");
+const seatLabels = {};
+let dealing = false;
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms / Number(speedSlider.value)));
+}
+
+function cardElement(text, hole) {
+  const card = document.createElement("div");
+  if (hole) { card.className = "card hole"; return card; }
+  const [rank, suitName] = text.split(" of ");
+  const red = suitName === "Hearts" || suitName === "Diamonds";
+  card.className = red ? "card red" : "card";
+  card.innerHTML = `<span>${rank}</span><span class="suit">${SUITS[suitName]}</span>`;
+  return card;
+}
+
+function seatElement(player) {
+  const seat = document.createElement("div");
+  seat.className = "seat";
+  seat.id = `seat-${player.player_id}`;
+  seat.innerHTML = `
+    <div class="kind">${player.kind}</div>
+    <div class="cards"></div>
+    <div class="total-chip"></div>
+    <div class="qpanel">
+      ${["hit", "stay", "double"].map((name) => `
+        <div class="qrow ${name}">
+          <span class="qname">${name}</span>
+          <span class="qbar-track"><span class="qbar"></span></span>
+          <span class="qval"></span>
+        </div>`).join("")}
+    </div>
+    <div class="action-chip"></div>
+    <div class="badge" style="visibility:hidden"></div>
+    <div class="money"></div>`;
+  return seat;
+}
+
+function setMoney(seat, money, delta) {
+  const deltaText = delta === undefined ? "" :
+    `<span class="delta" style="color:${delta >= 0 ? "#0ca30c" : "#e66767"}">${delta >= 0 ? "+" : ""}${delta}</span>`;
+  seat.querySelector(".money").innerHTML = `$${money}${deltaText}`;
+}
+
+async function renderSeatCards(seat, cards, total, isSoft) {
+  const holder = seat.querySelector(".cards");
+  while (holder.children.length > cards.length) holder.lastChild.remove();
+  for (let i = holder.children.length; i < cards.length; i += 1) {
+    holder.appendChild(cardElement(cards[i], false));
+    await pause(260);
+  }
+  seat.querySelector(".total-chip").textContent = total ? `${isSoft ? "soft " : ""}${total}` : "";
+}
+
+async function handleDeal(event) {
+  document.getElementById("hand-counter").textContent = `hand #${event.hand_number}`;
+  const known = new Set(event.players.map((p) => p.player_id));
+  [...seats.children].forEach((seat) => { if (!known.has(seat.id.slice(5))) seat.remove(); });
+  const dealerCards = document.getElementById("dealer-cards");
+  dealerCards.innerHTML = "";
+  document.getElementById("dealer-total").textContent = "";
+  for (const player of event.players) {
+    let seat = document.getElementById(`seat-${player.player_id}`);
+    if (!seat) { seat = seatElement(player); seats.appendChild(seat); }
+    seat.classList.remove("active");
+    seat.querySelector(".cards").innerHTML = "";
+    seat.querySelector(".total-chip").textContent = "";
+    seat.querySelector(".badge").style.visibility = "hidden";
+    seat.querySelector(".action-chip").textContent = "";
+    seat.querySelector(".qpanel").classList.remove("visible");
+    setMoney(seat, player.money);
+  }
+  for (const player of event.players) {
+    const seat = document.getElementById(`seat-${player.player_id}`);
+    await renderSeatCards(seat, player.cards, player.total, player.is_soft);
+  }
+  dealerCards.appendChild(cardElement(event.dealer_upcard, false));
+  await pause(260);
+  dealerCards.appendChild(cardElement("", true));
+  await pause(350);
+}
+
+async function handleDecision(event) {
+  const seat = document.getElementById(`seat-${event.player_id}`);
+  seat.classList.add("active");
+  const panel = seat.querySelector(".qpanel");
+  if (event.q_values) {
+    panel.classList.add("visible");
+    const values = Object.values(event.q_values);
+    const low = Math.min(...values), high = Math.max(...values);
+    for (const [name, value] of Object.entries(event.q_values)) {
+      const row = panel.querySelector(`.qrow.${name}`);
+      row.classList.toggle("chosen", name === event.action);
+      row.classList.toggle("illegal", !event.legal_actions.includes(name));
+      const share = high === low ? 1 : (value - low) / (high - low);
+      row.querySelector(".qbar").style.width = `${8 + share * 92}%`;
+      row.querySelector(".qval").textContent = value.toFixed(2);
+    }
+    await pause(700);
+  }
+  seat.querySelector(".action-chip").textContent = event.action;
+  await pause(420);
+  await renderSeatCards(seat, event.player.cards, event.player.total, event.player.is_soft);
+  if (event.player.total > 21) seat.querySelector(".total-chip").textContent = `bust ${event.player.total}`;
+  await pause(320);
+  seat.classList.remove("active");
+}
+
+async function handleDealer(event) {
+  const dealerCards = document.getElementById("dealer-cards");
+  dealerCards.lastChild.replaceWith(cardElement(event.cards[1], false));
+  await pause(420);
+  for (let i = 2; i < event.cards.length; i += 1) {
+    dealerCards.appendChild(cardElement(event.cards[i], false));
+    await pause(360);
+  }
+  document.getElementById("dealer-total").textContent = event.is_bust ? `bust ${event.total}` : event.total;
+  await pause(420);
+}
+
+async function handleSettle(event) {
+  for (const result of event.results) {
+    const seat = document.getElementById(`seat-${result.player_id}`);
+    const [cls, label] = RESULT_BADGES[result.result] || ["push", result.result];
+    const badge = seat.querySelector(".badge");
+    badge.className = `badge ${cls}`;
+    badge.textContent = label;
+    badge.style.visibility = "visible";
+    setMoney(seat, result.money, result.reward);
+  }
+  await pause(900);
+}
+
+function compactCards(cards) {
+  return cards.map((text) => {
+    const [rank, suitName] = text.split(" of ");
+    const red = suitName === "Hearts" || suitName === "Diamonds";
+    return `<span class="${red ? "red" : ""}">${rank}${SUITS[suitName]}</span>`;
+  }).join(" ");
+}
+
+function historyRow(hand, seat) {
+  const [cls, label] = RESULT_BADGES[seat.result] || ["push", seat.result];
+  const deltaCls = seat.reward > 0 ? "up" : seat.reward < 0 ? "down" : "";
+  const deltaText = `${seat.reward > 0 ? "+" : ""}${seat.reward}`;
+  return `<tr>
+    <td class="num">${hand.hand_number}</td>
+    <td>${seatLabels[seat.player_id] || seat.kind}</td>
+    <td class="cards-cell">${compactCards(seat.cards)} <span style="color:#898781">(${seat.total})</span></td>
+    <td>${seat.actions.join(", ") || "—"}</td>
+    <td class="cards-cell">${compactCards(hand.dealer_cards)} <span style="color:#898781">(${hand.dealer_total})</span></td>
+    <td><span class="pill ${cls}">${label}</span></td>
+    <td class="num delta ${deltaCls}">${deltaText}</td>
+    <td class="num">$${seat.money}</td>
+  </tr>`;
+}
+
+async function refreshHistory() {
+  const hands = await fetch("/api/history").then((response) => response.json());
+  const filter = historyFilter.value;
+  const rows = [];
+  for (const hand of [...hands].reverse()) {
+    for (const seat of hand.seats) {
+      if (filter && seat.player_id !== filter) continue;
+      rows.push(historyRow(hand, seat));
+    }
+  }
+  historyRows.innerHTML = rows.join("");
+}
+
+async function playHand() {
+  if (dealing) return;
+  dealing = true;
+  dealButton.disabled = true;
+  const events = await fetch("/api/hand").then((response) => response.json());
+  for (const event of events) {
+    if (event.type === "deal") await handleDeal(event);
+    if (event.type === "decision") await handleDecision(event);
+    if (event.type === "dealer") await handleDealer(event);
+    if (event.type === "settle") await handleSettle(event);
+  }
+  refreshHistory();
+  dealing = false;
+  dealButton.disabled = false;
+  if (autoBox.checked) playHand();
+}
+
+dealButton.addEventListener("click", playHand);
+autoBox.addEventListener("change", () => { if (autoBox.checked) playHand(); });
+historyFilter.addEventListener("change", refreshHistory);
+
+fetch("/api/state").then((response) => response.json()).then((state) => {
+  document.getElementById("meta").textContent =
+    `${state.agents} · ${state.run_path} · ε=${state.epsilon}`;
+  const seatHolder = document.getElementById("seats");
+  const kindCounts = {};
+  for (const player of state.players) {
+    seatHolder.appendChild(seatElement(player));
+    kindCounts[player.kind] = (kindCounts[player.kind] || 0) + 1;
+    seatLabels[player.player_id] = `${player.kind} #${kindCounts[player.kind]}`;
+    const option = document.createElement("option");
+    option.value = player.player_id;
+    option.textContent = seatLabels[player.player_id];
+    historyFilter.appendChild(option);
+  }
+  for (const player of state.players) {
+    setMoney(document.getElementById(`seat-${player.player_id}`), player.money);
+  }
+  refreshHistory();
+  if (new URLSearchParams(window.location.search).get("auto") === "1") {
+    autoBox.checked = true;
+    playHand();
+  }
+});
+</script>
+</body>
+</html>

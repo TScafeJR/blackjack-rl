@@ -4,8 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+matplotlib = "*"
 
 [dev-packages]
+black = "*"
+isort = "*"
+pylint = "*"
 
 [requires]
 python_version = "3.12"

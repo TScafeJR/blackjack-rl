@@ -23,13 +23,34 @@ class TurnStage(Enum):
     WAITING_RESULT = "waiting_result"
 
 
+class Observation:
+    def __init__(self, **kwargs):
+        self.player_total = kwargs.get("player_total", 0)
+        self.is_soft = kwargs.get("is_soft", False)
+        self.dealer_upcard_value = kwargs.get("dealer_upcard_value", 0)
+        self.can_double = kwargs.get("can_double", False)
+        self.money = kwargs.get("money", 0)
+
+
+class PendingTurn:
+    def __init__(self, **kwargs):
+        self.player_id = kwargs.get("player_id", "")
+        self.observation = kwargs.get("observation", None)
+        self.legal_actions = kwargs.get("legal_actions", [])
+
+
+class HandOutcome:
+    def __init__(self, **kwargs):
+        self.result = kwargs.get("result", HandResult.UNSPECIFIED)
+        self.reward = kwargs.get("reward", 0)
+        self.bet = kwargs.get("bet", 0)
+        self.money_after = kwargs.get("money_after", 0)
+
+
 class DecisionInfo:
     def __init__(self, **kwargs):
         self.min_bet = kwargs.get("min_bet", 10)
         self.max_bet = kwargs.get("max_bet", 10)
-        self.stage = kwargs.get("stage", TurnStage.SUBMITTING_BET)
-        self.player_bet = 0
-        self.action_reward = 0
-
-    def set_player_bet(self, bet: int):
-        self.player_bet = bet
+        self.stage = kwargs.get("stage", TurnStage.PLAYING)
+        self.observation = kwargs.get("observation", None)
+        self.legal_actions = kwargs.get("legal_actions", [])
