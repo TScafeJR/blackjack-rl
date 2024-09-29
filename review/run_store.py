@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 
 def latest_run_path(base_dir: str = "runs") -> str:
@@ -40,6 +40,13 @@ class RunStore:
 
     def append_losses(self, records: List[dict]) -> None:
         self.append_jsonl("loss.jsonl", records)
+
+    def read_json(self, filename: str) -> Optional[dict]:
+        path = os.path.join(self.run_path, filename)
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as json_file:
+            return json.load(json_file)
 
     def read_jsonl(self, filename: str) -> List[dict]:
         path = os.path.join(self.run_path, filename)

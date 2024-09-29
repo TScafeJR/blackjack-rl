@@ -3,7 +3,10 @@ import random
 import tempfile
 import unittest
 
-from .plots import render_all, rolling_mean
+from train.base_learner import build_network
+
+from .plots import (build_policy_grid, render_all, render_network_plots,
+                    rolling_mean)
 from .run_store import RunStore
 
 
@@ -63,6 +66,44 @@ class TestRenderAll(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             store = RunStore(base_dir=temp_dir, run_name="empty-run")
             self.assertEqual(render_all(store), [])
+
+    def test_render_all_includes_network_plots_with_weights(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = build_synthetic_run(temp_dir)
+            store.save_weights(
+                "dqn", build_network([32, 32], random.Random(1)).get_weights()
+            )
+            store.save_weights(
+                "mc", build_network([32, 32], random.Random(2)).get_weights()
+            )
+
+            rendered = render_all(store)
+
+            self.assertEqual(len(rendered), 8)
+            names = [os.path.basename(path) for path in rendered]
+            self.assertIn("network_weights.png", names)
+            self.assertIn("policy_charts.png", names)
+
+
+class TestNetworkPlots(unittest.TestCase):
+    def test_render_network_plots_without_weights(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = RunStore(base_dir=temp_dir, run_name="no-weights")
+            self.assertEqual(render_network_plots(store), [])
+
+    def test_build_policy_grid_shapes(self):
+        network = build_network([32, 32], random.Random(1))
+        network.set_training(False)
+
+        hard_grid = build_policy_grid(network, soft=False)
+        soft_grid = build_policy_grid(network, soft=True)
+
+        self.assertEqual(len(hard_grid), 18)
+        self.assertEqual(len(soft_grid), 10)
+        for row in hard_grid + soft_grid:
+            self.assertEqual(len(row), 10)
+            for action_index in row:
+                self.assertIn(action_index, [0, 1, 2])
 
 
 if __name__ == "__main__":

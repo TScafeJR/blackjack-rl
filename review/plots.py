@@ -1,6 +1,14 @@
+import random
 from typing import Dict, List
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
+
+from project import Observation
+from train.base_learner import build_network
+from train.config import LEARNING_KINDS
+from train.environment import encode_observation
 
 from .metrics import WIN_RESULTS, summarize_hands
 from .run_store import RunStore
@@ -213,6 +221,166 @@ def plot_epsilon_schedule(hand_records: List[dict], path: str) -> None:
     save_figure(figure, path)
 
 
+ACTION_LABELS = ["hit", "stay", "double"]
+ACTION_LETTERS = ["H", "S", "D"]
+ACTION_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"]
+LAYER_TITLES = ["input → hidden 1", "hidden 1 → hidden 2", "hidden 2 → q values"]
+UPCARD_VALUES = list(range(2, 12))
+
+
+def load_weights_by_kind(run_store: RunStore) -> Dict[str, list]:
+    weights_by_kind = {}
+    for kind in LEARNING_KINDS:
+        stored = run_store.read_json(f"weights_{kind}.json")
+        if stored is not None:
+            weights_by_kind[kind] = stored["weights"]
+    return weights_by_kind
+
+
+def draw_weight_panel(figure, axes, matrix, scale, title) -> None:
+    image = axes.imshow(matrix, cmap="RdBu_r", vmin=-scale, vmax=scale, aspect="auto")
+    axes.set_title(title, color=INK, fontsize=10)
+    axes.tick_params(colors=MUTED, labelsize=8)
+    for spine in axes.spines.values():
+        spine.set_color(GRID)
+    colorbar = figure.colorbar(image, ax=axes, shrink=0.85)
+    colorbar.ax.tick_params(colors=MUTED, labelsize=7)
+    colorbar.outline.set_edgecolor(GRID)
+
+
+def plot_weight_heatmaps(weights_by_kind: Dict[str, list], path: str) -> None:
+    kinds = sorted(weights_by_kind)
+    figure, axes_grid = plt.subplots(
+        len(kinds), 3, figsize=(12, 3.6 * len(kinds)), squeeze=False
+    )
+    figure.patch.set_facecolor(SURFACE)
+    for column, layer_index in enumerate([0, 2, 4]):
+        scale = max(
+            abs(value)
+            for kind in kinds
+            for row in weights_by_kind[kind][layer_index]
+            for value in row
+        )
+        for row_index, kind in enumerate(kinds):
+            matrix = weights_by_kind[kind][layer_index]
+            draw_weight_panel(
+                figure,
+                axes_grid[row_index][column],
+                matrix,
+                scale,
+                f"{kind}: {LAYER_TITLES[column]} ({len(matrix)}×{len(matrix[0])})",
+            )
+    figure.suptitle(
+        "learned weights (blue negative, red positive)", color=INK, fontsize=12
+    )
+    figure.tight_layout()
+    save_figure(figure, path)
+
+
+def build_policy_grid(network, soft: bool) -> List[List[int]]:
+    totals = range(12, 22) if soft else range(4, 22)
+    grid = []
+    for total in totals:
+        row = []
+        for upcard in UPCARD_VALUES:
+            observation = Observation(
+                player_total=total,
+                is_soft=soft,
+                dealer_upcard_value=upcard,
+                can_double=True,
+                money=1000,
+            )
+            q_values = network.forward([encode_observation(observation)])[0]
+            row.append(q_values.index(max(q_values)))
+        grid.append(row)
+    return grid
+
+
+def draw_policy_panel(axes, grid, totals, title) -> None:
+    axes.imshow(
+        grid,
+        cmap=ListedColormap(ACTION_COLORS),
+        vmin=0,
+        vmax=2,
+        aspect="auto",
+    )
+    for row_index, row in enumerate(grid):
+        for column_index, action_index in enumerate(row):
+            axes.text(
+                column_index,
+                row_index,
+                ACTION_LETTERS[action_index],
+                ha="center",
+                va="center",
+                color="#fcfcfb",
+                fontsize=7,
+                fontweight="bold",
+            )
+    axes.set_title(title, color=INK, fontsize=10)
+    axes.set_xticks(range(len(UPCARD_VALUES)))
+    axes.set_xticklabels(
+        ["A" if upcard == 11 else str(upcard) for upcard in UPCARD_VALUES]
+    )
+    axes.set_yticks(range(len(totals)))
+    axes.set_yticklabels([str(total) for total in totals])
+    axes.tick_params(colors=MUTED, labelsize=8)
+    axes.set_xlabel("dealer upcard", color=SECONDARY, fontsize=9)
+    axes.set_ylabel("player total", color=SECONDARY, fontsize=9)
+    for spine in axes.spines.values():
+        spine.set_color(GRID)
+
+
+def plot_policy_charts(weights_by_kind: Dict[str, list], path: str) -> None:
+    kinds = sorted(weights_by_kind)
+    figure, axes_grid = plt.subplots(
+        len(kinds), 2, figsize=(11, 5.2 * len(kinds)), squeeze=False
+    )
+    figure.patch.set_facecolor(SURFACE)
+    for row_index, kind in enumerate(kinds):
+        network = build_network([32, 32], random.Random(0))
+        network.set_training(False).set_weights(weights_by_kind[kind])
+        draw_policy_panel(
+            axes_grid[row_index][0],
+            build_policy_grid(network, soft=False),
+            list(range(4, 22)),
+            f"{kind}: hard totals",
+        )
+        draw_policy_panel(
+            axes_grid[row_index][1],
+            build_policy_grid(network, soft=True),
+            list(range(12, 22)),
+            f"{kind}: soft totals",
+        )
+    legend_patches = [
+        Patch(facecolor=color, label=label)
+        for color, label in zip(ACTION_COLORS, ACTION_LABELS)
+    ]
+    figure.legend(
+        handles=legend_patches,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        labelcolor=SECONDARY,
+    )
+    figure.suptitle("learned policy (double assumed available)", color=INK, fontsize=12)
+    figure.tight_layout(rect=(0, 0.04, 1, 1))
+    save_figure(figure, path)
+
+
+def render_network_plots(run_store: RunStore) -> List[str]:
+    weights_by_kind = load_weights_by_kind(run_store)
+    if not weights_by_kind:
+        return []
+    rendered = []
+    heatmap_path = run_store.plot_path("network_weights.png")
+    plot_weight_heatmaps(weights_by_kind, heatmap_path)
+    rendered.append(heatmap_path)
+    policy_path = run_store.plot_path("policy_charts.png")
+    plot_policy_charts(weights_by_kind, policy_path)
+    rendered.append(policy_path)
+    return rendered
+
+
 def render_all(run_store: RunStore) -> List[str]:
     hand_records = run_store.read_jsonl("metrics.jsonl")
     loss_records = run_store.read_jsonl("loss.jsonl")
@@ -244,4 +412,5 @@ def render_all(run_store: RunStore) -> List[str]:
         path = run_store.plot_path(filename)
         renderer(path)
         rendered.append(path)
+    rendered.extend(render_network_plots(run_store))
     return rendered
