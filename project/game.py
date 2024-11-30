@@ -4,6 +4,13 @@ from enum import Enum
 class Game:
     BLACKJACK_SCORE = 21
     DEALER_HIT_CEIL = 16
+    DEALER_SOFT_STAND = 17
+
+
+class DealerRule(Enum):
+    SOFT_ANY = "soft_any"
+    HIT_SOFT_17 = "h17"
+    STAND_SOFT_17 = "s17"
 
 
 class HandResult(Enum):
@@ -30,6 +37,7 @@ class Observation:
         self.dealer_upcard_value = kwargs.get("dealer_upcard_value", 0)
         self.can_double = kwargs.get("can_double", False)
         self.money = kwargs.get("money", 0)
+        self.true_count = kwargs.get("true_count", 0.0)
 
 
 class PendingTurn:

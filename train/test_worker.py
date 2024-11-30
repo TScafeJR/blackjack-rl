@@ -1,21 +1,25 @@
 import queue
 import unittest
 
+from project import DealerRule
+
 from .dqn import DQNLearner
+from .environment import BET_UNITS, Episode
 from .worker import FakeEvent, FakeQueue, TableWorker, WorkerSpec
 
 
-def build_worker():
+def build_worker(**kwargs):
     spec = WorkerSpec(
         worker_id=0,
         seed=11,
         hand_budget=50,
         flush_rounds=5,
-        table_seats=[["dqn", "noob"]],
+        table_seats=kwargs.get("table_seats", [["dqn", "noob"]]),
         hidden_sizes=[32, 32],
         starting_money=1000,
         minimum_bet=10,
         num_decks=4,
+        dealer_rule=kwargs.get("dealer_rule", "soft_any"),
     )
     experience_queue = FakeQueue()
     weights_queue = FakeQueue()
@@ -96,6 +100,51 @@ class TestTableWorker(unittest.TestCase):
                 break
             total_records += len(message["records"])
         self.assertEqual(total_records, worker.hands_done)
+
+
+class TestTrainableEpisodes(unittest.TestCase):
+    def test_hands_with_decisions_are_trainable(self):
+        self.assertTrue(TableWorker.is_trainable(Episode(steps=[object()])))
+
+    def test_naturals_are_trainable_when_a_bet_was_chosen(self):
+        episode = Episode(steps=[], bet_features=[0.3, 0.5], bet_action_index=4)
+        self.assertTrue(TableWorker.is_trainable(episode))
+
+    def test_naturals_without_a_bet_decision_are_dropped(self):
+        self.assertFalse(TableWorker.is_trainable(Episode(steps=[])))
+
+
+class TestWorkerBetting(unittest.TestCase):
+    def test_ramp_seats_get_a_shared_bet_policy(self):
+        worker, _, _, _ = build_worker(table_seats=[["dqn-ramp", "dqn-ramp"]])
+
+        self.assertEqual(len(worker.bet_policies), 1)
+        environment = worker.environments[0]
+        self.assertEqual(len(environment.bet_policies), 2)
+        self.assertEqual(len(set(map(id, environment.bet_policies.values()))), 1)
+
+    def test_plain_learning_seats_have_no_bet_policy(self):
+        worker, _, _, _ = build_worker(table_seats=[["dqn", "mc-count"]])
+
+        self.assertEqual(worker.bet_policies, {})
+        self.assertEqual(worker.environments[0].bet_policies, {})
+
+    def test_records_carry_count_and_wager(self):
+        worker, _, _, _ = build_worker(table_seats=[["dqn-ramp", "basic"]])
+
+        worker.play_iteration()
+
+        for record in worker.pending_records:
+            self.assertIn("true_count", record)
+            self.assertIn(record["bet_units"], BET_UNITS)
+            self.assertEqual(record["base_bet"], 10)
+
+    def test_dealer_rule_reaches_the_table(self):
+        worker, _, _, _ = build_worker(dealer_rule="s17")
+
+        dealer = worker.environments[0].table.get_dealer()
+
+        self.assertEqual(dealer.dealer_rule, DealerRule.STAND_SOFT_17)
 
 
 if __name__ == "__main__":

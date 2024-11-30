@@ -22,7 +22,10 @@ class BaseTable:
         self.hand_results: Dict[str, int] = {}
         self.card_tracker: Dict[str, int] = {}
         self.active_bets: Dict[str, int] = {}
-        self.handle_init(kwargs.get("num_decks", 1))
+        self.num_decks = kwargs.get("num_decks", 1)
+        self.handle_init(self.num_decks)
+        self.running_count = 0
+        self.count_epoch = self.cards.shuffle_epoch
 
     def handle_init(self, num_decks: int):
         self.add_decks(num_decks)
@@ -38,6 +41,7 @@ class BaseTable:
         return self
 
     def add_player(self, new_player: Player) -> Self:
+        new_player.base_bet = self.minimum_bet
         self.players.append(new_player)
         return self
 
@@ -93,6 +97,31 @@ class BaseTable:
     def get_active_players(self) -> List[Player]:
         return [p for p in self.players if p.get_money() >= self.minimum_bet]
 
+    def update_count_from_settlement(self, active_players: List[Player]) -> None:
+        if self.cards.shuffle_epoch != self.count_epoch:
+            self.count_epoch = self.cards.shuffle_epoch
+            self.running_count = 0
+            return
+        for player in active_players:
+            self.running_count += player.hand.hi_lo_count()
+        self.running_count += self.get_dealer().hand.hi_lo_count()
+
+    def visible_running_count(self) -> int:
+        count = self.running_count
+        for player in self.players:
+            count += player.hand.hi_lo_count()
+        if self.dealer is not None and len(self.dealer.hand.cards) > 0:
+            count += self.dealer.preview_card().hi_lo_value()
+        return count
+
+    def decks_remaining(self) -> float:
+        return max(len(self.cards.cards), 13) / 52.0
+
+    def true_count(self) -> float:
+        if self.cards.shuffle_epoch != self.count_epoch:
+            return 0.0
+        return self.visible_running_count() / self.decks_remaining()
+
     def take_bet(self, player: Player) -> int:
         bet_amount = player.submit_bet()
         self.active_bets[player.player_id] = bet_amount
@@ -109,7 +138,9 @@ class BaseTable:
         self.collect_cards()
         self.active_bets = {}
         active_players = self.get_active_players()
+        current_true_count = self.true_count()
         for player in active_players:
+            player.true_count = current_true_count
             self.take_bet(player)
             player.set_playing(True)
         self.deal_initial_cards(active_players)
@@ -130,6 +161,7 @@ class BaseTable:
             dealer_upcard_value=max(upcard.get_value()),
             can_double=self.can_double(player),
             money=player.get_money(),
+            true_count=self.true_count(),
         )
 
     def get_legal_actions(self, player: Player) -> List[PlayerDecision]:
@@ -209,6 +241,7 @@ class BaseTable:
         return 0
 
     def settle_bets(self, active_players: List[Player]) -> Dict[str, HandOutcome]:
+        self.update_count_from_settlement(active_players)
         outcomes = {}
         for player in active_players:
             result = self.resolve_player_result(player)

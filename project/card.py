@@ -19,5 +19,13 @@ class Card:
 
         return [int(self.display)]
 
+    def hi_lo_value(self) -> int:
+        values = self.get_value()
+        if len(values) > 1 or values[0] == 10:
+            return -1
+        if values[0] <= 6:
+            return 1
+        return 0
+
     def to_string(self) -> str:
         return f"{self.display} of {self.suit}"

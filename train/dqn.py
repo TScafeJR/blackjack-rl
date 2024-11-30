@@ -9,7 +9,9 @@ class DQNLearner(BaseLearner):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.target_sync_interval = kwargs.get("target_sync_interval", 500)
-        self.target_network = build_network(self.hidden_sizes, self.rng)
+        self.target_network = build_network(
+            self.hidden_sizes, self.rng, self.feature_count, self.action_count
+        )
         self.sync_target_network()
 
     def sync_target_network(self) -> None:

@@ -184,5 +184,66 @@ class TestTable(unittest.TestCase):
                 self.assertIsInstance(player.get_money(), int)
 
 
+class TestCardCounting(unittest.TestCase):
+    def setUp(self):
+        random.seed(17)
+        self.dealer = Dealer()
+        self.player = Player(starting_money=100, player_type=PlayerType.COUNTING)
+        self.table = Table(num_decks=1, minimum_bet=10)
+        self.table.add_dealer(self.dealer).add_player(self.player)
+
+    def test_settlement_updates_running_count(self):
+        self.player.receive_card(Card("2", "Spades"))
+        self.player.receive_card(Card("3", "Hearts"))
+        self.dealer.receive_card(Card("K", "Clubs"))
+        self.dealer.receive_card(Card("7", "Diamonds"))
+
+        self.table.update_count_from_settlement([self.player])
+
+        self.assertEqual(self.table.running_count, 1)
+
+    def test_settlement_resets_count_after_reshuffle(self):
+        self.table.running_count = 4
+        self.table.cards.shuffle_epoch += 1
+
+        self.table.update_count_from_settlement([self.player])
+
+        self.assertEqual(self.table.running_count, 0)
+        self.assertEqual(self.table.count_epoch, self.table.cards.shuffle_epoch)
+
+    def test_visible_count_excludes_dealer_hole_card(self):
+        self.player.receive_card(Card("2", "Spades"))
+        self.player.receive_card(Card("4", "Hearts"))
+        self.dealer.receive_card(Card("K", "Clubs"))
+        self.dealer.receive_card(Card("5", "Diamonds"))
+
+        self.assertEqual(self.table.visible_running_count(), 1)
+
+    def test_true_count_scales_by_decks_remaining(self):
+        self.table.running_count = 3
+        self.assertAlmostEqual(self.table.true_count(), 3.0)
+
+        self.table.cards.cards = self.table.cards.cards[:26]
+        self.assertAlmostEqual(self.table.true_count(), 6.0)
+
+    def test_true_count_neutral_right_after_reshuffle(self):
+        self.table.running_count = 5
+        self.table.cards.shuffle_epoch += 1
+
+        self.assertEqual(self.table.true_count(), 0.0)
+
+    def test_observation_carries_true_count(self):
+        self.table.running_count = 2
+        self.player.receive_card(Card("9", "Spades"))
+        self.player.receive_card(Card("8", "Hearts"))
+        self.dealer.receive_card(Card("7", "Clubs"))
+        self.dealer.receive_card(Card("K", "Diamonds"))
+
+        observation = self.table.build_observation(self.player)
+
+        self.assertAlmostEqual(observation.true_count, self.table.true_count())
+        self.assertNotEqual(observation.true_count, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

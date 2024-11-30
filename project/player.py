@@ -1,7 +1,7 @@
 import random
 import uuid
 from enum import Enum
-from typing import Self
+from typing import Optional, Self
 
 from .base_player import BasePlayer
 from .game import DecisionInfo, TurnStage
@@ -21,6 +21,11 @@ class PlayerType(Enum):
     AGGRESSIVE = 3
     RANDOM = 4
     BASIC = 5
+    COUNTING = 6
+
+
+BET_UNIT_CAP = 5
+DEFAULT_BASE_BET = 10
 
 
 class DecisionResult:
@@ -55,6 +60,9 @@ class Player(BasePlayer):
         self.player_type = kwargs.get("player_type", PlayerType.RANDOM)
         self.hands_played = 0
         self.playing = False
+        self.true_count = 0.0
+        self.base_bet = kwargs.get("base_bet", DEFAULT_BASE_BET)
+        self.bet_units = 1
 
     @staticmethod
     def should_double_hard(observation) -> bool:
@@ -118,6 +126,51 @@ class Player(BasePlayer):
             return Player.decide_basic_soft(observation)
         return Player.decide_basic_hard(observation)
 
+    COUNTING_DOUBLE_DEVIATIONS = [
+        (10, (10, 11), 4.0),
+        (9, (2,), 1.0),
+        (9, (7,), 3.0),
+        (8, (6,), 2.0),
+    ]
+    COUNTING_STAND_DEVIATIONS = [
+        (16, (10,), 1.0),
+        (15, (10,), 4.0),
+        (12, (2,), 3.0),
+        (12, (3,), 2.0),
+    ]
+    COUNTING_HIT_DEVIATIONS = [
+        (13, (2,), -1.0),
+        (12, (4,), -0.5),
+    ]
+
+    @staticmethod
+    def counting_deviation(observation) -> Optional[PlayerDecision]:
+        if observation.is_soft:
+            return None
+        total = observation.player_total
+        upcard = observation.dealer_upcard_value
+        true_count = observation.true_count
+        if observation.can_double:
+            for rule_total, upcards, floor in Player.COUNTING_DOUBLE_DEVIATIONS:
+                if total == rule_total and upcard in upcards and true_count >= floor:
+                    return PlayerDecision.DOUBLE_DOWN
+        for rule_total, upcards, floor in Player.COUNTING_STAND_DEVIATIONS:
+            if total == rule_total and upcard in upcards and true_count >= floor:
+                return PlayerDecision.STAY
+        for rule_total, upcards, ceiling in Player.COUNTING_HIT_DEVIATIONS:
+            if total == rule_total and upcard in upcards and true_count <= ceiling:
+                return PlayerDecision.HIT
+        return None
+
+    @staticmethod
+    def decide_counting(observation) -> PlayerDecision:
+        if observation is None:
+            return PlayerDecision.HIT
+        deviation = Player.counting_deviation(observation)
+        if deviation is not None:
+            return deviation
+        return Player.decide_basic_strategy(observation)
+
     @staticmethod
     def decide_for_type(
         player_type: PlayerType, decision_info: DecisionInfo
@@ -132,8 +185,12 @@ class Player(BasePlayer):
             if money < decision_info.min_bet * 2:
                 return PlayerDecision.HIT
             return PlayerDecision.DOUBLE_DOWN
-        if player_type == PlayerType.BASIC:
-            return Player.decide_basic_strategy(decision_info.observation)
+        strategy_deciders = {
+            PlayerType.BASIC: Player.decide_basic_strategy,
+            PlayerType.COUNTING: Player.decide_counting,
+        }
+        if player_type in strategy_deciders:
+            return strategy_deciders[player_type](decision_info.observation)
         return random.choice(list(PlayerDecision))
 
     def set_playing(self, playing: bool) -> None:
@@ -152,9 +209,16 @@ class Player(BasePlayer):
     def get_money(self) -> int:
         return self.money
 
-    @staticmethod
-    def get_bet_amount() -> int:
-        return 10
+    def count_bet_units(self) -> int:
+        return max(1, min(BET_UNIT_CAP, int(self.true_count)))
+
+    def get_bet_units(self) -> int:
+        if self.player_type == PlayerType.COUNTING:
+            return self.count_bet_units()
+        return self.bet_units
+
+    def get_bet_amount(self) -> int:
+        return self.base_bet * self.get_bet_units()
 
     def submit_bet(self) -> int:
         bet_amount = min(self.get_bet_amount(), self.money)
@@ -183,14 +247,6 @@ class Player(BasePlayer):
         self.last_hand_res = 0
 
     def type_as_str(self) -> str:
-        if self.player_type == PlayerType.NOOB:
-            return "NOOB"
-        if self.player_type == PlayerType.APPREHENSIVE:
-            return "APPREHENSIVE"
-        if self.player_type == PlayerType.AGGRESSIVE:
-            return "AGGRESSIVE"
-        if self.player_type == PlayerType.RANDOM:
-            return "RANDOM"
-        if self.player_type == PlayerType.BASIC:
-            return "BASIC"
+        if isinstance(self.player_type, PlayerType):
+            return self.player_type.name
         return "UNKNOWN"

@@ -5,24 +5,33 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch, Rectangle
 
-from project import Observation, Player, PlayerDecision
+from project import BET_UNIT_CAP, Observation, Player, PlayerDecision
 from train.base_learner import build_network
-from train.config import LEARNING_KINDS
-from train.environment import encode_observation
+from train.betting import BET_WEIGHTS_SUFFIX
+from train.config import LEARNING_KINDS, LEARNING_SPECS
+from train.environment import (BET_ACTION_COUNT, BET_FEATURE_COUNT, BET_UNITS,
+                               encode_bet_state, encode_observation,
+                               feature_count_for)
 
-from .metrics import WIN_RESULTS, summarize_hands
+from .metrics import (WIN_RESULTS, record_base_bet, record_bet_units,
+                      summarize_hands)
 from .run_store import RunStore
 
 plt.switch_backend("Agg")
 
 KIND_COLORS = {
     "dqn": "#2a78d6",
+    "dqn-count": "#1f4f8f",
+    "dqn-ramp": "#00b4d8",
     "mc": "#eb6834",
+    "mc-count": "#a8421a",
+    "mc-ramp": "#f2a25c",
     "noob": "#1baf7a",
     "apprehensive": "#eda100",
     "aggressive": "#e87ba4",
     "random": "#008300",
     "basic": "#4a3aa7",
+    "counting": "#7b2d8e",
 }
 FALLBACK_COLOR = "#4a3aa7"
 SURFACE = "#fcfcfb"
@@ -238,6 +247,36 @@ def load_weights_by_kind(run_store: RunStore) -> Dict[str, list]:
     return weights_by_kind
 
 
+def load_bet_weights_by_kind(run_store: RunStore) -> Dict[str, list]:
+    weights_by_kind = {}
+    for kind in LEARNING_KINDS:
+        stored = run_store.read_json(f"weights_{kind}{BET_WEIGHTS_SUFFIX}.json")
+        if stored is not None:
+            weights_by_kind[kind] = stored["weights"]
+    return weights_by_kind
+
+
+def uses_count(kind: str) -> bool:
+    spec = LEARNING_SPECS.get(kind)
+    return spec is not None and spec.uses_count
+
+
+def network_for_kind(kind: str, weights: list):
+    network = build_network(
+        [32, 32], random.Random(0), feature_count_for(uses_count(kind))
+    )
+    network.set_training(False).set_weights(weights)
+    return network
+
+
+def bet_network_from_weights(weights: list):
+    network = build_network(
+        [32, 32], random.Random(0), BET_FEATURE_COUNT, BET_ACTION_COUNT
+    )
+    network.set_training(False).set_weights(weights)
+    return network
+
+
 def draw_weight_panel(figure, axes, matrix, scale, title) -> None:
     image = axes.imshow(matrix, cmap="RdBu_r", vmin=-scale, vmax=scale, aspect="auto")
     axes.set_title(title, color=INK, fontsize=10)
@@ -278,7 +317,9 @@ def plot_weight_heatmaps(weights_by_kind: Dict[str, list], path: str) -> None:
     save_figure(figure, path)
 
 
-def build_policy_grid(network, soft: bool) -> List[List[int]]:
+def build_policy_grid(
+    network, soft: bool, with_count: bool = False, true_count: float = 0.0
+) -> List[List[int]]:
     totals = range(12, 22) if soft else range(4, 22)
     grid = []
     for total in totals:
@@ -290,8 +331,10 @@ def build_policy_grid(network, soft: bool) -> List[List[int]]:
                 dealer_upcard_value=upcard,
                 can_double=True,
                 money=1000,
+                true_count=true_count,
             )
-            q_values = network.forward([encode_observation(observation)])[0]
+            features = encode_observation(observation, with_count)
+            q_values = network.forward([features])[0]
             row.append(q_values.index(max(q_values)))
         grid.append(row)
     return grid
@@ -338,17 +381,17 @@ def plot_policy_charts(weights_by_kind: Dict[str, list], path: str) -> None:
     )
     figure.patch.set_facecolor(SURFACE)
     for row_index, kind in enumerate(kinds):
-        network = build_network([32, 32], random.Random(0))
-        network.set_training(False).set_weights(weights_by_kind[kind])
+        network = network_for_kind(kind, weights_by_kind[kind])
+        with_count = uses_count(kind)
         draw_policy_panel(
             axes_grid[row_index][0],
-            build_policy_grid(network, soft=False),
+            build_policy_grid(network, soft=False, with_count=with_count),
             list(range(4, 22)),
             f"{kind}: hard totals",
         )
         draw_policy_panel(
             axes_grid[row_index][1],
-            build_policy_grid(network, soft=True),
+            build_policy_grid(network, soft=True, with_count=with_count),
             list(range(12, 22)),
             f"{kind}: soft totals",
         )
@@ -447,11 +490,11 @@ def plot_policy_vs_basic(weights_by_kind: Dict[str, list], path: str) -> None:
         "basic strategy (H17 reference): soft totals",
     )
     for row_index, kind in enumerate(kinds, start=1):
-        network = build_network([32, 32], random.Random(0))
-        network.set_training(False).set_weights(weights_by_kind[kind])
+        network = network_for_kind(kind, weights_by_kind[kind])
+        with_count = uses_count(kind)
         grids = [
-            build_policy_grid(network, soft=False),
-            build_policy_grid(network, soft=True),
+            build_policy_grid(network, soft=False, with_count=with_count),
+            build_policy_grid(network, soft=True, with_count=with_count),
         ]
         share = agreement_share(grids, basic_grids)
         draw_policy_panel(
@@ -488,6 +531,145 @@ def plot_policy_vs_basic(weights_by_kind: Dict[str, list], path: str) -> None:
     save_figure(figure, path)
 
 
+RAMP_COUNTS = [count / 2.0 for count in range(-12, 13)]
+COUNT_BUCKETS = list(range(-5, 6))
+DEVIATION_COUNTS = [-4.0, 4.0]
+
+
+def heuristic_ramp_units(true_count: float) -> int:
+    return max(1, min(BET_UNIT_CAP, int(true_count)))
+
+
+def plot_bet_ramp(bet_weights_by_kind: Dict[str, list], path: str) -> None:
+    figure, axes = build_figure(
+        "Learned bet ramp", "true count", "bet size (min-bet units)"
+    )
+    axes.step(
+        RAMP_COUNTS,
+        [heuristic_ramp_units(count) for count in RAMP_COUNTS],
+        where="post",
+        color=MUTED,
+        linewidth=2,
+        linestyle="--",
+        label="hand-tuned counter",
+    )
+    for kind in sorted(bet_weights_by_kind):
+        network = bet_network_from_weights(bet_weights_by_kind[kind])
+        units = []
+        for true_count in RAMP_COUNTS:
+            values = network.forward([encode_bet_state(true_count, 2.0)])[0]
+            units.append(BET_UNITS[values.index(max(values))])
+        axes.step(
+            RAMP_COUNTS,
+            units,
+            where="post",
+            color=color_for_kind(kind),
+            linewidth=2,
+            label=kind,
+        )
+    axes.set_yticks(BET_UNITS)
+    axes.axvline(0, color=GRID, linewidth=1)
+    add_legend(axes)
+    save_figure(figure, path)
+
+
+def bucket_records_by_count(records: List[dict]) -> Dict[int, List[dict]]:
+    buckets: Dict[int, List[dict]] = {}
+    for record in records:
+        if "true_count" not in record:
+            continue
+        bucket = max(
+            COUNT_BUCKETS[0], min(COUNT_BUCKETS[-1], round(record["true_count"]))
+        )
+        buckets.setdefault(int(bucket), []).append(record)
+    return buckets
+
+
+def plot_count_response(hand_records: List[dict], path: str) -> None:
+    figure, axes_grid = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    figure.patch.set_facecolor(SURFACE)
+    style_axes(axes_grid[0], "Wager by true count", "", "avg bet (min-bet units)")
+    style_axes(axes_grid[1], "Profit by true count", "true count", "units won per hand")
+    for kind, records in sorted(group_by_kind(hand_records).items()):
+        buckets = bucket_records_by_count(records)
+        counts = sorted(buckets)
+        if not counts:
+            continue
+        wagers = [
+            sum(record_bet_units(record) for record in buckets[count])
+            / len(buckets[count])
+            for count in counts
+        ]
+        profits = [
+            sum(
+                record["reward"] * record["bet"] / record_base_bet(record)
+                for record in buckets[count]
+            )
+            / len(buckets[count])
+            for count in counts
+        ]
+        axes_grid[0].plot(
+            counts, wagers, color=color_for_kind(kind), linewidth=2, label=kind
+        )
+        axes_grid[1].plot(
+            counts, profits, color=color_for_kind(kind), linewidth=2, label=kind
+        )
+    axes_grid[1].axhline(0, color=MUTED, linewidth=1)
+    add_legend(axes_grid[0])
+    figure.tight_layout()
+    save_figure(figure, path)
+
+
+def plot_count_deviations(weights_by_kind: Dict[str, list], path: str) -> None:
+    kinds = sorted(kind for kind in weights_by_kind if uses_count(kind))
+    if not kinds:
+        return
+    figure, axes_grid = plt.subplots(
+        len(kinds), 2, figsize=(11, 5.2 * len(kinds)), squeeze=False
+    )
+    figure.patch.set_facecolor(SURFACE)
+    for row_index, kind in enumerate(kinds):
+        network = network_for_kind(kind, weights_by_kind[kind])
+        grids = [
+            build_policy_grid(
+                network, soft=False, with_count=True, true_count=true_count
+            )
+            for true_count in DEVIATION_COUNTS
+        ]
+        for column, (true_count, grid) in enumerate(zip(DEVIATION_COUNTS, grids)):
+            draw_policy_panel(
+                axes_grid[row_index][column],
+                grid,
+                list(range(4, 22)),
+                f"{kind}: hard totals at true count {true_count:+.0f}",
+            )
+        changed = mark_disagreements(axes_grid[row_index][1], grids[1], grids[0])
+        axes_grid[row_index][1].set_title(
+            f"{kind}: true count {DEVIATION_COUNTS[1]:+.0f} "
+            f"({changed} cells shift from {DEVIATION_COUNTS[0]:+.0f})",
+            color=INK,
+            fontsize=10,
+        )
+    legend_patches = [
+        Patch(facecolor=color, label=label)
+        for color, label in zip(ACTION_COLORS, ACTION_LABELS)
+    ]
+    figure.legend(
+        handles=legend_patches,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        labelcolor=SECONDARY,
+    )
+    figure.suptitle(
+        "count-conditioned play (outlined = differs from the negative count)",
+        color=INK,
+        fontsize=12,
+    )
+    figure.tight_layout(rect=(0, 0.03, 1, 0.97))
+    save_figure(figure, path)
+
+
 def render_network_plots(run_store: RunStore) -> List[str]:
     weights_by_kind = load_weights_by_kind(run_store)
     if not weights_by_kind:
@@ -502,6 +684,15 @@ def render_network_plots(run_store: RunStore) -> List[str]:
     comparison_path = run_store.plot_path("policy_vs_basic.png")
     plot_policy_vs_basic(weights_by_kind, comparison_path)
     rendered.append(comparison_path)
+    if any(uses_count(kind) for kind in weights_by_kind):
+        deviations_path = run_store.plot_path("count_deviations.png")
+        plot_count_deviations(weights_by_kind, deviations_path)
+        rendered.append(deviations_path)
+    bet_weights_by_kind = load_bet_weights_by_kind(run_store)
+    if bet_weights_by_kind:
+        ramp_path = run_store.plot_path("bet_ramp.png")
+        plot_bet_ramp(bet_weights_by_kind, ramp_path)
+        rendered.append(ramp_path)
     return rendered
 
 
@@ -529,6 +720,10 @@ def render_all(run_store: RunStore) -> List[str]:
             lambda path: plot_epsilon_schedule(hand_records, path),
         ),
     ]
+    if any("true_count" in record for record in hand_records):
+        plots.append(
+            ("count_response.png", lambda path: plot_count_response(hand_records, path))
+        )
     if loss_records:
         plots.insert(0, ("loss.png", lambda path: plot_loss_curves(loss_records, path)))
 

@@ -10,6 +10,7 @@ class Deck:
     def __init__(self):
         self.cards = self.add_cards()
         self.discarded_cards: List[Card] = []
+        self.shuffle_epoch = 0
         self.shuffle_cards()
 
     @staticmethod
@@ -42,4 +43,5 @@ class Deck:
     def shuffle_empty_deck(self):
         self.cards = self.discarded_cards
         self.discarded_cards = []
+        self.shuffle_epoch += 1
         self.shuffle_cards()

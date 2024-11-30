@@ -1,12 +1,20 @@
 import random
 from typing import List
 
-from project import DecisionInfo, PendingTurn, Player, PlayerType
+from project import DecisionInfo, Observation, PendingTurn, Player, PlayerType
 
-from .environment import ACTION_DECISIONS
+from .environment import ACTION_DECISIONS, encode_observation
 
 
 class BasePolicy:
+    uses_count = False
+
+    def __init__(self, **kwargs):
+        self.uses_count = kwargs.get("uses_count", False)
+
+    def encode(self, observation: Observation) -> List[float]:
+        return encode_observation(observation, self.uses_count)
+
     def select_action(self, pending_turn: PendingTurn, features: List[float]) -> int:
         raise Exception("Select action is not implemented")
 
@@ -16,6 +24,7 @@ class BasePolicy:
 
 class NetworkPolicy(BasePolicy):
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.network = kwargs.get("network")
         self.epsilon = kwargs.get("epsilon", 0.0)
         self.rng = kwargs.get("rng", random.Random())
@@ -44,6 +53,7 @@ class NetworkPolicy(BasePolicy):
 
 class HeuristicPolicy(BasePolicy):
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.player_type: PlayerType = kwargs.get("player_type", PlayerType.RANDOM)
         self.rng = kwargs.get("rng", random.Random())
 

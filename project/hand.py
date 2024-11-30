@@ -63,6 +63,9 @@ class Hand:
     def is_bust(self) -> bool:
         return self.get_high_value() > Game.BLACKJACK_SCORE
 
+    def hi_lo_count(self) -> int:
+        return sum(card.hi_lo_value() for card in self.cards)
+
     def show_cards(self) -> List[str]:
         return list(map(lambda x: x.to_string(), self.cards))
 

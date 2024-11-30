@@ -163,6 +163,19 @@ class TestTrainTable(unittest.TestCase):
         self.assertTrue(self.table.is_hand_complete())
         self.assertEqual(self.table.settle_hand(), {})
 
+    def test_counting_player_bets_with_the_count(self):
+        counting_player = Player(starting_money=1000, player_type=PlayerType.COUNTING)
+        counting_table = TrainTable(num_decks=1, minimum_bet=10, rebuy=False)
+        counting_table.add_dealer(Dealer()).add_player(counting_player)
+        counting_table.running_count = 3
+
+        counting_table.begin_hand()
+
+        self.assertEqual(
+            counting_table.active_bets[counting_player.player_id],
+            30,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

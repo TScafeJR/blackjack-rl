@@ -1,10 +1,14 @@
 from .base_player import BasePlayer
 from .card import Card
 from .deck import Deck
-from .game import Game
+from .game import DealerRule, Game
 
 
 class Dealer(BasePlayer):
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.dealer_rule: DealerRule = kwargs.get("dealer_rule", DealerRule.SOFT_ANY)
+
     @staticmethod
     def deal_player_initial_cards(player: BasePlayer, table_deck: Deck) -> None:
         started_with_one = len(table_deck.cards) == 1
@@ -46,10 +50,24 @@ class Dealer(BasePlayer):
     def deal_self_card(self, deck: Deck) -> None:
         self.deal_player_card(self, deck)
 
-    def can_hit(self) -> bool:
+    def can_hit_any_soft(self) -> bool:
         count = 0
         for val in self.get_hand_values():
             if val <= Game.DEALER_HIT_CEIL:
                 count += 1
 
         return count > 0
+
+    def can_hit(self) -> bool:
+        if self.dealer_rule == DealerRule.SOFT_ANY:
+            return self.can_hit_any_soft()
+
+        total = self.get_hand_value()
+        if total <= Game.DEALER_HIT_CEIL:
+            return True
+
+        return (
+            self.dealer_rule == DealerRule.HIT_SOFT_17
+            and total == Game.DEALER_SOFT_STAND
+            and self.has_soft_hand()
+        )

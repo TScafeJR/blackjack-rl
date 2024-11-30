@@ -8,8 +8,10 @@ from review import MetricsCollector, RunStore, format_summary, summarize_hands
 from review.plots import render_all
 
 from .base_learner import BaseLearner
-from .config import TrainingConfig
+from .betting import BET_WEIGHTS_SUFFIX, BetLearner
+from .config import LEARNING_SPECS, TrainingConfig
 from .dqn import DQNLearner
+from .environment import feature_count_for
 from .learner import LearnerLoop
 from .monte_carlo import MonteCarloLearner
 from .worker import FakeEvent, FakeQueue, TableWorker, WorkerSpec, run_worker
@@ -21,9 +23,11 @@ class TrainingRun:
         self.metrics = MetricsCollector()
         self.run_store: RunStore = None
         self.learners: Dict[str, BaseLearner] = {}
+        self.weights_queues: List = []
         self.started_at = 0.0
 
     def build_learner(self, kind: str) -> BaseLearner:
+        spec = LEARNING_SPECS[kind]
         learner_kwargs = {
             "hidden_sizes": self.config.hidden_sizes,
             "learning_rate": self.config.learning_rate,
@@ -36,9 +40,17 @@ class TrainingRun:
             "target_sync_interval": self.config.target_sync_interval,
             "seed": self.config.seed,
         }
-        if kind == "dqn":
-            return DQNLearner(**learner_kwargs)
-        return MonteCarloLearner(**learner_kwargs)
+        if spec.algorithm == "dqn":
+            learner = DQNLearner(
+                **learner_kwargs, feature_count=feature_count_for(spec.uses_count)
+            )
+        else:
+            learner = MonteCarloLearner(
+                **learner_kwargs, feature_count=feature_count_for(spec.uses_count)
+            )
+        if spec.learns_bet:
+            learner.bet_learner = BetLearner(**learner_kwargs)
+        return learner
 
     def build_learners(self) -> Dict[str, BaseLearner]:
         return {
@@ -74,6 +86,8 @@ class TrainingRun:
             starting_money=self.config.starting_money,
             minimum_bet=self.config.minimum_bet,
             num_decks=self.config.num_decks,
+            dealer_rule=self.config.dealer_rule,
+            reward_scale=self.config.reward_scale,
         )
         learner_loop = self.build_learner_loop()
         learner_loop.broadcast([weights_queue])
@@ -109,12 +123,19 @@ class TrainingRun:
                     starting_money=self.config.starting_money,
                     minimum_bet=self.config.minimum_bet,
                     num_decks=self.config.num_decks,
+                    dealer_rule=self.config.dealer_rule,
+                    reward_scale=self.config.reward_scale,
                 )
             )
         return specs
 
     @staticmethod
-    def shutdown_workers(processes, stop_event, experience_queue, learner_loop):
+    def release_queues(queues) -> None:
+        for pending_queue in queues:
+            pending_queue.cancel_join_thread()
+            pending_queue.close()
+
+    def shutdown_workers(self, processes, stop_event, experience_queue, learner_loop):
         stop_event.set()
         for process in processes:
             attempts = 0
@@ -126,13 +147,15 @@ class TrainingRun:
                 process.terminate()
                 process.join(timeout=5)
         learner_loop.drain(experience_queue)
+        self.release_queues(self.weights_queues + [experience_queue])
 
     def run_parallel(self) -> None:
         context = multiprocessing.get_context("spawn")
         experience_queue = context.Queue(maxsize=16)
         stop_event = context.Event()
         specs = self.build_worker_specs()
-        weights_queues = [context.Queue() for _ in specs]
+        self.weights_queues = [context.Queue() for _ in specs]
+        weights_queues = self.weights_queues
         learner_loop = self.build_learner_loop()
         learner_loop.broadcast(weights_queues)
 
@@ -174,7 +197,8 @@ class TrainingRun:
             f"agents: {self.config.agents}",
             (
                 f"tables: {self.config.tables}  workers: {self.config.workers}  "
-                f"hands: {self.config.hands}  seed: {self.config.seed}"
+                f"hands: {self.config.hands}  seed: {self.config.seed}  "
+                f"dealer: {self.config.dealer_rule}"
             ),
             (
                 f"played {hands_recorded} hands in {duration:.0f}s "
@@ -194,6 +218,11 @@ class TrainingRun:
     def finalize(self) -> str:
         for kind, learner in self.learners.items():
             self.run_store.save_weights(kind, learner.network.get_weights())
+            if learner.bet_learner is not None:
+                self.run_store.save_weights(
+                    f"{kind}{BET_WEIGHTS_SUFFIX}",
+                    learner.bet_learner.network.get_weights(),
+                )
         report = self.build_report()
         print(report)
         self.run_store.save_report(report)

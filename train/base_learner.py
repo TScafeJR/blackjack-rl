@@ -7,16 +7,21 @@ from .environment import ACTION_COUNT, FEATURE_COUNT, Episode
 from .replay_buffer import ReplayBuffer, Transition
 
 
-def build_network(hidden_sizes: List[int], rng: random.Random) -> Sequential:
+def build_network(
+    hidden_sizes: List[int],
+    rng: random.Random,
+    feature_count: int = FEATURE_COUNT,
+    action_count: int = ACTION_COUNT,
+) -> Sequential:
     layers = []
-    in_features = FEATURE_COUNT
+    in_features = feature_count
     for hidden_size in hidden_sizes:
         layers.append(
             Linear(in_features=in_features, out_features=hidden_size, rng=rng)
         )
         layers.append(ReLU())
         in_features = hidden_size
-    layers.append(Linear(in_features=in_features, out_features=ACTION_COUNT, rng=rng))
+    layers.append(Linear(in_features=in_features, out_features=action_count, rng=rng))
     return Sequential(layers)
 
 
@@ -29,7 +34,12 @@ class BaseLearner:
         self.epsilon_end = kwargs.get("epsilon_end", 0.05)
         self.epsilon_decay_hands = kwargs.get("epsilon_decay_hands", 10000)
         self.batch_size = kwargs.get("batch_size", 64)
-        self.network = build_network(self.hidden_sizes, self.rng)
+        self.feature_count = kwargs.get("feature_count", FEATURE_COUNT)
+        self.action_count = kwargs.get("action_count", ACTION_COUNT)
+        self.bet_learner: Optional["BaseLearner"] = None
+        self.network = build_network(
+            self.hidden_sizes, self.rng, self.feature_count, self.action_count
+        )
         self.buffer = ReplayBuffer(
             capacity=kwargs.get("buffer_size", 10000), rng=self.rng
         )
@@ -50,16 +60,24 @@ class BaseLearner:
     def handle_episode(self, episode: Episode) -> None:
         raise Exception("Handle episode is not implemented")
 
+    @staticmethod
+    def should_handle(episode: Episode) -> bool:
+        return bool(episode.steps)
+
     def ingest(self, episodes: List[Episode]) -> None:
         for episode in episodes:
             self.hands_seen += 1
-            if episode.steps:
+            if self.should_handle(episode):
                 self.handle_episode(episode)
+        if self.bet_learner is not None:
+            self.bet_learner.ingest(episodes)
 
     def compute_target_values(self, batch: List[Transition]) -> List[float]:
         raise Exception("Compute target values is not implemented")
 
     def train_step(self) -> Optional[float]:
+        if self.bet_learner is not None:
+            self.bet_learner.train_step()
         if len(self.buffer) < self.batch_size:
             return None
         batch = self.buffer.sample(self.batch_size)
@@ -83,7 +101,16 @@ class BaseLearner:
         return
 
     def get_snapshot(self) -> dict:
-        return {"weights": self.network.get_weights(), "epsilon": self.get_epsilon()}
+        snapshot = {
+            "weights": self.network.get_weights(),
+            "epsilon": self.get_epsilon(),
+        }
+        if self.bet_learner is not None:
+            snapshot["bet"] = self.bet_learner.get_snapshot()
+        return snapshot
 
     def count_parameters(self) -> int:
-        return self.network.count_parameters()
+        total = self.network.count_parameters()
+        if self.bet_learner is not None:
+            total += self.bet_learner.count_parameters()
+        return total

@@ -1,16 +1,46 @@
 import argparse
 from typing import Dict, List, Tuple
 
-from project import PlayerType
+from project import DealerRule, PlayerType
 
-LEARNING_KINDS = ["dqn", "mc"]
+from .environment import FINAL_BET_SCALE, REWARD_SCALES
+
 HEURISTIC_KINDS: Dict[str, PlayerType] = {
     "noob": PlayerType.NOOB,
     "apprehensive": PlayerType.APPREHENSIVE,
     "aggressive": PlayerType.AGGRESSIVE,
     "random": PlayerType.RANDOM,
     "basic": PlayerType.BASIC,
+    "counting": PlayerType.COUNTING,
 }
+
+DEALER_RULES: Dict[str, DealerRule] = {
+    "soft_any": DealerRule.SOFT_ANY,
+    "h17": DealerRule.HIT_SOFT_17,
+    "s17": DealerRule.STAND_SOFT_17,
+}
+
+
+class LearningSpec:
+    def __init__(self, **kwargs):
+        self.algorithm = kwargs.get("algorithm", "dqn")
+        self.uses_count = kwargs.get("uses_count", False)
+        self.learns_bet = kwargs.get("learns_bet", False)
+
+
+def build_learning_specs() -> Dict[str, LearningSpec]:
+    specs: Dict[str, LearningSpec] = {}
+    for algorithm in ["dqn", "mc"]:
+        specs[algorithm] = LearningSpec(algorithm=algorithm)
+        specs[f"{algorithm}-count"] = LearningSpec(algorithm=algorithm, uses_count=True)
+        specs[f"{algorithm}-ramp"] = LearningSpec(
+            algorithm=algorithm, uses_count=True, learns_bet=True
+        )
+    return specs
+
+
+LEARNING_SPECS: Dict[str, LearningSpec] = build_learning_specs()
+LEARNING_KINDS: List[str] = list(LEARNING_SPECS)
 
 
 def parse_agents(agents_spec: str) -> List[Tuple[str, int]]:
@@ -49,8 +79,13 @@ class TrainingConfig:
         self.starting_money = kwargs.get("starting_money", 1000)
         self.minimum_bet = kwargs.get("minimum_bet", 10)
         self.num_decks = kwargs.get("num_decks", 4)
+        self.dealer_rule = kwargs.get("dealer_rule", "soft_any")
+        self.reward_scale = kwargs.get("reward_scale", FINAL_BET_SCALE)
         self.seat_counts = parse_agents(self.agents)
         self.validate()
+
+    def dealer_rule_value(self) -> DealerRule:
+        return DEALER_RULES[self.dealer_rule]
 
     def total_seats(self) -> int:
         return sum(count for _, count in self.seat_counts)
@@ -99,10 +134,16 @@ class TrainingConfig:
             "starting_money": self.starting_money,
             "minimum_bet": self.minimum_bet,
             "num_decks": self.num_decks,
+            "dealer_rule": self.dealer_rule,
+            "reward_scale": self.reward_scale,
         }
 
     def validate(self) -> None:
         total = self.total_seats()
+        if self.dealer_rule not in DEALER_RULES:
+            raise Exception(f"Unknown dealer rule: {self.dealer_rule}")
+        if self.reward_scale not in REWARD_SCALES:
+            raise Exception(f"Unknown reward scale: {self.reward_scale}")
         if self.tables < 1:
             raise Exception("At least one table is required")
         if self.workers < 0:
@@ -147,6 +188,8 @@ def config_from_args(argv=None) -> TrainingConfig:
     parser.add_argument("--starting-money", type=int, default=1000)
     parser.add_argument("--minimum-bet", type=int, default=10)
     parser.add_argument("--num-decks", type=int, default=4)
+    parser.add_argument("--dealer-rule", default="soft_any", choices=list(DEALER_RULES))
+    parser.add_argument("--reward-scale", default=FINAL_BET_SCALE, choices=REWARD_SCALES)
     args = parser.parse_args(argv)
 
     return TrainingConfig(
@@ -170,4 +213,6 @@ def config_from_args(argv=None) -> TrainingConfig:
         starting_money=args.starting_money,
         minimum_bet=args.minimum_bet,
         num_decks=args.num_decks,
+        dealer_rule=args.dealer_rule,
+        reward_scale=args.reward_scale,
     )

@@ -52,6 +52,12 @@ class TestDeck(unittest.TestCase):
         self.deck.combine_deck_and_shuffle(Deck())
         self.assertEqual(len(self.deck.cards), 104)
 
+    def test_shuffle_empty_deck_increments_epoch(self):
+        self.assertEqual(self.deck.shuffle_epoch, 0)
+        for _ in range(53):
+            self.deck.draw_card()
+        self.assertEqual(self.deck.shuffle_epoch, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
