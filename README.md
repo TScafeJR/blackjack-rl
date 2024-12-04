@@ -36,21 +36,21 @@ Everything below the reporting layer is standard library Python. The network mat
 
 \* textbook H17 basic strategy, evaluated separately under the same rules.
 
-Both learners end up about 13 points of win rate above the naive baselines and slightly EV positive because of this engine's dealer rule (see house rules). Textbook basic strategy still edges them out. The agents match it on 77% (dqn) and 71% (mc) of states, and the full comparison, the disagreement charts, and when I'd pick each algorithm are in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md).
+Both learners end up about 13 points of win rate above the naive baselines and slightly EV positive because of this engine's dealer rule (see house rules). Textbook basic strategy still edges them out.
 
 ![the network deciding](docs/img/board-decision.png)
 
-### can they learn to count?
+That result raised two follow up questions, and answering the second one turned up a bug in the first. Three writeups:
 
-The follow up question was whether an agent could work out when to raise its bet, which needed two things it didn't have: the running count in its observation, and control of the bet at all. Flat bets plus a reward normalised by bet size meant wagering was invisible to the objective.
+**[mc-vs-dqn.md](docs/mc-vs-dqn.md) — two ways to learn the same policy.** Monte Carlo control against deep Q-learning on identical networks, observations and rewards, so the only difference is the target. They converge to roughly the same EV with visibly different styles, and since the observation is four numbers the whole policy can be drawn as a strategy card. MC gets there in half the hands; DQN's extra machinery buys stability rather than better play. They match the book on 77% and 71% of states, and the disagreement charts show exactly where the gap goes.
 
-Given both, `dqn-ramp` learned a real bet ramp. It bets the table minimum below a true count of +1 and jumps straight to the five unit cap from +3 up, which is sharper than the textbook Hi-Lo staircase and worth more per hand than it (+0.075 vs +0.071 units):
+**[card-counting.md](docs/card-counting.md) — can they work out when to raise?** Needed two things the agents didn't have: the count in their observation, and control of the bet at all. Given both, one agent learned a genuine bet ramp, sharper than the textbook Hi-Lo staircase and worth more per hand (+0.075 vs +0.071 units):
 
 ![learned bet ramp](docs/img/bet_ramp.png)
 
-Then I tried to replicate it and mostly couldn't. Across eight independent ramp learners under the same rules, two found a usable rising ramp, one learned it *backwards*, and five never left the table minimum — including a rerun on the same seed as the chart above. The variance arithmetic explains it: the edge separating a five unit bet from a one unit bet is about 0.10 units, and the noise on a five unit bet is about 4.9, so resolving it needs roughly an order of magnitude more hands than these runs had.
+Then it mostly failed to replicate. Two of eight independent ramp learners found a usable ramp, one learned it *backwards*, five never left the table minimum — including a rerun on the same seed as that chart. The variance arithmetic predicts it: about 0.10 units of edge separating a five unit bet from a one unit bet, against 4.9 of noise. The replication is the real finding, and it puts a number on how much data the question actually needs.
 
-The replication is the real result, and it's the more useful one. Two other findings came out of the same work: count-aware play didn't reliably beat count-blind play (deviations are worth +0.002 units/hand here, well under the noise floor), and chasing the doubling numbers turned up a reward-scale bug that had been quietly costing every learner money since long before this experiment. Full writeup in [docs/card-counting.md](docs/card-counting.md).
+**[reward-scaling.md](docs/reward-scaling.md) — the reward was hiding the double down.** Chasing why agents with positive per-unit returns still lost money: reward is net profit over the *final* bet, so a doubled loss and a flat loss both train on -1 and the doubled stake is priced at zero. Every learner beats basic strategy on hands it doesn't double, then gives it all back doubling — MC does it on four hands in ten. This one predates the counting work and affects every number in the first writeup.
 
 ## how to run:
 

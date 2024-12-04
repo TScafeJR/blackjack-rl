@@ -174,28 +174,11 @@ The deviations do show up in the policy itself even where they don't show up in 
 
 ![count-conditioned play](img/count_deviations.png)
 
-### the expensive mistake was doubling, and the reward scale was hiding it
+### the learners were bleeding money somewhere else entirely
 
-This is the one I did not go looking for. Splitting the house-rule run by whether the hand was doubled:
+The units-per-hand column exposed something the counting question didn't ask about. Every learner shows a near break-even `ev/unit` and a badly negative `units/hand`, and the two only diverge when bet size correlates with outcome. It traces back to doubling: on hands they don't double, every learner beats basic strategy per unit, and then MC doubles four hands in ten at -0.155 each.
 
-| agent | double % | ev/unit when doubling | ev/unit otherwise |
-| --- | --- | --- | --- |
-| basic strategy | 10.0% | **+0.171** | +0.019 |
-| hand-tuned counter | 11.3% | **+0.204** | +0.010 |
-| dqn | 12.7% | **-0.377** | +0.050 |
-| dqn-count | 12.5% | -0.357 | +0.055 |
-| dqn-ramp | 9.5% | -0.350 | +0.057 |
-| mc | 38.7% | -0.155 | +0.108 |
-| mc-count | 42.8% | -0.201 | +0.155 |
-| mc-ramp | 43.2% | -0.159 | +0.147 |
-
-On hands they don't double, every learner is *better* than basic strategy per unit. Then they double, and it's a bloodbath. MC doubles four out of ten hands, which explains a lot about the swings in the earlier writeup.
-
-The reason is the reward normalisation, and it's the same blind spot the bet network was built to fix. Reward is net profit over the *final* bet. Double down and lose: net is -2 units, final bet is 2 units, reward is -1. Don't double and lose: net is -1, bet is 1, reward is -1. **Identical.** Winning is symmetric: both cases give exactly +1. So doubling changes the stake and changes nothing at all in the training signal. The network's entire preference for it comes from the "take exactly one more card and stop" mechanics, with the doubled stake priced at zero.
-
-Which means the play network was never told that doubling costs anything, and the flat-bet metric couldn't show the damage either, because it normalises the same way. The units-per-hand column is what makes it visible: `dqn` has an ev/unit of -0.004 but bleeds -0.052 units per hand, and the gap is almost entirely doubled hands.
-
-`--reward-scale initial_bet` divides by the opening bet instead, so a doubled loss trains on -2 and a doubled win on +2. The default is unchanged so the earlier results stay comparable.
+The cause is the same blind spot the bet network was built to fix, one layer down. Reward is net profit over the *final* bet, so a doubled loss and a flat loss both train on -1 and the doubled stake is priced at zero. It affects every learner in the repo, not just the counting ones, so it has its own page: [reward-scaling.md](reward-scaling.md).
 
 ## why the bet ramp is hard to learn
 
@@ -211,7 +194,7 @@ The signal a counter is chasing is small and the variance it's buried in grows w
 
 ## what I'd do differently
 
-Price the double properly by default. `--reward-scale initial_bet` exists now, but it should probably be the default, and the older results should be re-run under it. The current normalisation makes hit and stand easy to learn by removing a nuisance variable, and it happens to remove the entire cost of the one action that changes the stake.
+Price the double properly and re-run everything under it, for the reasons in [reward-scaling.md](reward-scaling.md). That fix probably matters more than anything on this page.
 
 Give the bet learner a variance reduction. Expected return is exactly linear in bet size, so estimating one number per count (the per-unit edge) and deriving the bet from it would collapse five noisy estimates into one and cut the sample requirement by most of an order of magnitude. I deliberately didn't do that here because handing the model the linear structure is close to handing it the answer, and I wanted to see whether the bandit could find the ramp on its own. It can, sometimes, which is the more interesting result, but it isn't how I'd build it if I wanted the ramp to work.
 
