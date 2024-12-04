@@ -1,26 +1,25 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## blackjack rl repo
+## blackjack rl
 
-This started as a simple blackjack game and turned into a learning exercise. I wanted to build the whole ML stack for a reinforcement learning agent myself, neural network math included, and see how far it could get at the table.
+A neural network and a reinforcement learning stack, both written from scratch in standard library Python. The network math — forward pass, backprop, optimizers — is derived by hand and verified two ways: a finite difference gradient check over every parameter in the network, and a unit test that reproduces a worked 2-2-1 example exactly, forward pass through blame assignment through weight update. Training runs as an actor/learner system, with worker processes simulating tables and streaming experience to a learner that trains and broadcasts updated weights back out. On top of that sits a controlled comparison of Monte Carlo control against deep Q-learning, holding the network, observations, rewards and exploration schedule fixed so that the training target is the only variable.
 
-Everything below the reporting layer is standard library Python. The network math (forward pass, backprop, optimizers) is written by hand and tested against worked examples and finite difference gradient checks. matplotlib is the only dependency, and it's just for plots.
+Blackjack is the environment, not the subject. It suits the problem: episodes are short, the observation is four numbers so a learned policy can be drawn in full, and there's a known reference policy to measure against. matplotlib is the only dependency and only the reporting layer imports it.
 
 ![agents playing on the board](docs/img/board.gif)
 
 ### what's here
 
-- `project/` - the game engine: cards, decks, hands, dealer, players, multi-seat tables, and a casino that runs many tables
-- `neural/` - the neural network library: Linear / ReLU / LeakyReLU / Sigmoid / Dropout layers, MSE and softmax cross-entropy losses, SGD / RMSprop / Adam optimizers, and a Trainer with batching, shuffling, and validation splits
-- `train/` - the RL layer: a Deep Q-learning agent and a Monte Carlo control agent built on `neural/`, heuristic baseline players, and an actor/learner setup that scales from a single process up to worker processes running dozens of tables
+- `neural/` - the network library: Linear / ReLU / LeakyReLU / Sigmoid / Dropout layers, MSE and softmax cross-entropy losses, SGD / RMSprop / Adam optimizers, and a Trainer with batching, shuffling, and validation splits. No third-party imports
+- `train/` - the RL layer: a deep Q-learning agent and a Monte Carlo control agent sharing one learner base class, heuristic and textbook baselines, and the actor/learner loop that scales from a single process up to worker processes running dozens of tables
+- `project/` - the game engine: cards, decks, hands, dealer, players, multi-seat tables with a running Hi-Lo count, and a casino that runs many tables
 - `review/` - run metrics, CLI reports, matplotlib plots, and a browser board for watching trained agents play
 
-### things I was practicing
+### how training is wired
 
-- backprop by hand. The layer gradients are derived manually, checked with finite differences, and there's a unit test that reproduces a worked 2-2-1 example exactly
-- value based RL two ways: Q-learning with a target network and replay, next to plain Monte Carlo regression. Comparison in [docs/mc-vs-dqn.md](docs/mc-vs-dqn.md)
-- multiprocessing. Worker processes simulate tables and stream experience back to a learner, which broadcasts updated weights out to them
-- keeping experiments honest: seeded runs, baselines in every experiment, training curves, and artifacts saved per run
+Each worker process owns a slice of the tables. It plays hands under the weights it currently holds, batches the finished episodes, and pushes them through a queue to the learner, which groups them by agent kind, takes gradient steps against a replay buffer, and broadcasts a fresh weight snapshot back to every worker. There's one learner per agent kind, so a `dqn` and an `mc` seated at the same table learn separately from the same shoes.
+
+`--workers 0` runs the identical worker class inline in one process, with the queues and the stop event swapped for stubs. Both paths are smoke tested end to end.
 
 ## results
 
@@ -40,7 +39,9 @@ Both learners end up about 13 points of win rate above the naive baselines and s
 
 ![the network deciding](docs/img/board-decision.png)
 
-That result raised two follow up questions, and answering the second one turned up a bug in the first. Three writeups:
+## experiments
+
+Three writeups. The first is the comparison the stack was built for; the second failed to replicate and says so; the third is a bug in my own reward function that the second one turned up.
 
 **[mc-vs-dqn.md](docs/mc-vs-dqn.md) — two ways to learn the same policy.** Monte Carlo control against deep Q-learning on identical networks, observations and rewards, so the only difference is the target. They converge to roughly the same EV with visibly different styles, and since the observation is four numbers the whole policy can be drawn as a strategy card. MC gets there in half the hands; DQN's extra machinery buys stability rather than better play. They match the book on 77% and 71% of states, and the disagreement charts show exactly where the gap goes.
 
@@ -48,9 +49,26 @@ That result raised two follow up questions, and answering the second one turned 
 
 ![learned bet ramp](docs/img/bet_ramp.png)
 
-Then it mostly failed to replicate. Two of eight independent ramp learners found a usable ramp, one learned it *backwards*, five never left the table minimum — including a rerun on the same seed as that chart. The variance arithmetic predicts it: about 0.10 units of edge separating a five unit bet from a one unit bet, against 4.9 of noise. The replication is the real finding, and it puts a number on how much data the question actually needs.
+Then it mostly failed to replicate. Two of eight independent ramp learners found a usable ramp, one learned it *backwards*, five never left the table minimum — including a rerun on the same seed as that chart. The variance arithmetic predicts it: about 0.10 units of edge separating a five unit bet from a one unit bet, against 4.9 of noise. **The failed replication is the result**, not the ramp. It puts a number on how much data the question actually needs, which is roughly an order of magnitude more than I gave it.
 
-**[reward-scaling.md](docs/reward-scaling.md) — the reward was hiding the double down.** Chasing why agents with positive per-unit returns still lost money: reward is net profit over the *final* bet, so a doubled loss and a flat loss both train on -1 and the doubled stake is priced at zero. Every learner beats basic strategy on hands it doesn't double, then gives it all back doubling — MC does it on four hands in ten. This one predates the counting work and affects every number in the first writeup.
+**[reward-scaling.md](docs/reward-scaling.md) — the reward was hiding the double down.** Chasing why agents with positive per-unit returns still lost money: reward is net profit over the *final* bet, so a doubled loss and a flat loss both train on -1 and the doubled stake is priced at zero. Every learner beats basic strategy on hands it doesn't double, then gives it all back doubling — MC does it on four hands in ten. This one predates the counting work and affects every number in the first writeup, including the results table above. The fix is available behind `--reward-scale initial_bet` and the earlier runs have not been redone under it, so the published numbers keep meaning what they meant when they were measured.
+
+## reproducibility
+
+Every training run writes a self-contained `runs/<timestamp>/`:
+
+| file | contents |
+| --- | --- |
+| `config.json` | every hyperparameter and rule setting the run was launched with |
+| `metrics.jsonl` | one record per hand: agent kind, result, reward, bet, bankroll, epsilon, true count, rebuys |
+| `loss.jsonl` | training loss per step per agent kind, with buffer occupancy and hands seen |
+| `weights_<kind>.json` | learned weights per agent kind, reloadable by the plotters and the board |
+| `report.txt` | the printed summary table |
+| `plots/*.png` | training loss, rolling win rate, reward comparison, result breakdown, bankroll trajectories, the exploration schedule, weight heatmaps, and the policy charts. Counting agents add the learned bet ramp, wager-by-count, and count deviation charts |
+
+Synchronous runs (`--workers 0`) are reproducible bit for bit under a given seed. Parallel runs seed each worker deterministically, but process interleaving means exact replays aren't possible.
+
+Baselines are seated in the run itself rather than measured separately: `basic`, `counting` and the naive heuristics play the same shoes at the same tables as the learners, so every comparison in the writeups is within-run. Reports can be re-derived from `metrics.jsonl` after the fact, at any tail window, without retraining.
 
 ## how to run:
 
@@ -82,8 +100,6 @@ make board
 make board AGENTS="dqn=2,mc=1,random=1"
 ```
 
-Every training run writes `runs/<timestamp>/` with `config.json`, `metrics.jsonl`, `loss.jsonl`, learned weights per agent kind, `report.txt`, and `plots/*.png` (training loss, rolling win rate, reward comparison, result breakdown, bankroll trajectories, the exploration schedule, and, when counting agents are seated, the learned bet ramp and wager-by-count charts).
-
 `--tail 0.2` scopes a report to the last 20% of each agent's hands, which is where converged behaviour lives once epsilon has decayed. `--counts` adds a breakdown of bet size and profit by true count.
 
 The board is a local page served with the stdlib `http.server`, no extra dependencies. It animates each hand card by card, shows the network's live value estimates for hit / stay / double while the agent decides, and keeps a filterable play history per seat. Add `?auto=1` to the URL to start dealing on load.
@@ -102,7 +118,7 @@ Learning agents see their hand total, a soft ace flag, the dealer upcard, and wh
 
 Rewards come in two scales, which turns out to matter. The play network trains on net profit as a fraction of the bet, so its target is bet-size invariant and it learns how to play a hand rather than how much to wager. The bet network trains on net profit in units of the table minimum, which is the only way bet sizing can show up in the objective at all.
 
-That first normalisation has a catch worth knowing about: dividing by the *final* bet also prices a double down at zero, since a doubled loss and a flat loss both come out at -1. `--reward-scale initial_bet` divides by the opening bet instead, so doubling is worth ±2 the way it should be. The default is left alone so earlier runs stay comparable. Full writeup in [docs/card-counting.md](docs/card-counting.md).
+That first normalisation has a catch worth knowing about: dividing by the *final* bet also prices a double down at zero, since a doubled loss and a flat loss both come out at -1. `--reward-scale initial_bet` divides by the opening bet instead, so doubling is worth ±2 the way it should be. The default is left alone so earlier runs stay comparable. Full writeup in [docs/reward-scaling.md](docs/reward-scaling.md).
 
 ## house rules
 
@@ -113,12 +129,10 @@ That first normalisation has a catch worth knowing about: dividing by the *final
 - actions are hit, stay, and double down. Bets are flat at the table minimum unless an agent sizes them, capped at five units
 - training tables re-buy busted players back to their starting bankroll and count the re-buys. The demo casino plays with real bankroll elimination
 
-Synchronous runs (`--workers 0`) are reproducible bit for bit under a given seed. Parallel runs seed each worker deterministically, but process interleaving means exact replays aren't possible.
-
 ## development
 
 ```shell
-make test      # unit tests across all four packages
-make lint      # pylint via .pylintrc
+make test      # 232 unit tests across all four packages
+make lint      # pylint via .pylintrc, currently 10.00
 make lint-fix  # black + isort, then pylint
 ```
